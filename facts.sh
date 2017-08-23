@@ -3,7 +3,7 @@
 # facts: gather system facts (like osfamily).
 #
 # Author: Asher256 <asher256@gmail.com>
-# Website: http://www.asher256.com/
+# Github repo: https://github.com/Asher256/docker-pbuild/
 # License: GPL
 #
 # This source code follows the Google style guide for shell scripts:
@@ -13,36 +13,29 @@
 set -u
 set -e
 
-lower_case() {
-    echo "$1" | sed "y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/"
-}
-
-uname=`uname`
-
 # facts
 osfamily=unknown
-operatingsystem=`lower_case "$uname"`
+operatingsystem=`uname`
 kernelrelease=`uname -r`
 architecture=`uname -m`
 
-operatingsystem=`uname`
 if [ "$operatingsystem" = "Linux" ]; then
   if [ -f /etc/alpine-release ]; then
-    osfamily='alpine'
+    osfamily='Alpine'
   elif [ -f /etc/debian_version ]; then
-    osfamily='debian'
+    osfamily='Debian'
   elif [ -f /etc/redhat-release ]; then
-    osfamily='redhat'
+    osfamily='RedHat'
   elif [ -f /etc/SuSE-release ]; then
-    osfamily='suse'
+    osfamily='SuSE'
   elif [ -f /etc/arch-release ]; then
-    osfamily='archlinux'
+    osfamily='Archlinux'
   fi
 fi
 
-# the last variable
+# Output in the Yaml format
 echo "osfamily: $osfamily"
-echo "operatingsystem: $osfamily"
+echo "operatingsystem: $operatingsystem"
 echo "kernelrelease: $kernelrelease"
 echo "architecture: $architecture"
 

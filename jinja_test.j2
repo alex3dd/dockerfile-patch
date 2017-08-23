@@ -1,0 +1,3 @@
+{% if osfamily == 'debian' %}
+RUN apt-get update    # added by docker-pbuild!
+{% endif %}

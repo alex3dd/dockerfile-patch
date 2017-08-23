@@ -4,7 +4,7 @@
 # Author: Asher256 <asher256@gmail.com>
 # License: GPL
 #
-# Github repo: https://github.com/Asher256/docker-pbuild
+# Github repo: https://github.com/Asher256/docker-pbuild/
 #
 # This source code follows the PEP-8 style guide:
 # https://www.python.org/dev/peps/pep-0008/
@@ -16,6 +16,7 @@ after 'FROM', to build a patched version of a Dockerfile.
 
 Features:
     - Load a Dockerfile and patch it
+    - Load facters from a pulled Docker image
 
 """
 
@@ -38,7 +39,7 @@ assert platform.system() == 'Linux', 'The operating system needs to be Linux'
 assert sys.version_info >= (3, 3), "The Python version needs to be >= 3.3"
 
 
-class Dockerfile(object):
+class DockerfilePatcher(object):
     """Load a Dockerfile and patch it."""
 
     def __init__(self):
@@ -49,6 +50,7 @@ class Dockerfile(object):
 
     def load(self, path):
         """Load a Dockerfile."""
+        logging.info('[DOCKERFILE PATCHER] Loading: %s', path)
         dfp = DockerfileParser(path=path)
         self.structure = deepcopy(dfp.structure)
 
@@ -70,6 +72,7 @@ class Dockerfile(object):
 
             result.append(item)
 
+        logging.info("Images found in the Dockerfile: %s", str(result))
         return result
 
     def set_patch(self, image, content):
@@ -116,6 +119,8 @@ class DockerFacter(object):
 
         # this jinja patch will be inserted as a patch using DockerfilePatcher
         self.jinja_patch = jinja_patch
+        logging.info('Jinja patch loaded:\n%s\n',
+                     self.jinja_patch)
 
     def gather_facts(self, image):
         """Run the facter script in an image name.
@@ -146,8 +151,6 @@ class DockerFacter(object):
                              facter_script_path, self.facter_script_content)
                 fhandler.write(self.facter_script_content)
             os.chmod(facter_script_path, 0o755)
-            logging.info('[FACTER] Temporary file created: %s',
-                         facter_script_path)
 
             docker_client = docker.client.from_env()
 
@@ -181,7 +184,10 @@ class DockerFacter(object):
                     logging.info("[FACTER WARNING] Temporary file wasn't "
                                  "found: %s", path)
 
-        return yaml.load(stdout)
+        facts = yaml.load(stdout)
+        logging.info('[FACTS] System facts gathered: %s', str(facts))
+
+        return facts
 
 
 def garbage_collector(signum, frame):
@@ -195,6 +201,27 @@ def garbage_collector(signum, frame):
         sys.exit(0)
 
 
+def command_line_interface():
+    """The command line interface."""
+    # Load the Dockerfile
+    dockerfile = DockerfilePatcher()
+    dockerfile.load('Dockerfile.test')
+
+    images = dockerfile.get_images()
+
+    # Load the scripts
+    with open('facts.sh', 'r') as fhandler:
+        facter_script = fhandler.read()
+
+    with open('jinja_test.j2', 'r') as fhandler:
+        jinja_patch = fhandler.read()
+
+    # Load the facters
+    pbuild = DockerFacter(facter_script=facter_script,
+                          jinja_patch=jinja_patch)
+    facts = pbuild.gather_facts('ubuntu:latest')
+
+
 def main():
     """The program starts here."""
 
@@ -204,44 +231,7 @@ def main():
     signal.signal(signal.SIGINT, garbage_collector)
     signal.signal(signal.SIGTERM, garbage_collector)
 
-    # First test
-    facter_script = """#!/usr/bin/env sh
-# Author: Asher256 <asher256@gmail.com>
-osfamily=unknown
-
-if which apt-get >/dev/null 2>&1; then
-    osfamily=debian
-else
-    # It is important to redirect it to stderr >&2 to avoid mixing
-    # errors with the Yaml returned by this script
-    echo "Operating system not detected." >&2
-    exit 1
-fi
-echo "osfamily: $osfamily"
-"""
-
-    jinja_patch = """{% if osfamily == 'debian' %}
-RUN apt-get update    # added by docker-pbuild!
-{% endif %}
-"""
-
-    pbuild = DockerFacter(facter_script=facter_script,
-                          jinja_patch=jinja_patch)
-
-    print('Facter script:')
-    print('==============')
-    print(pbuild.facter_script_content)
-
-    print()
-    print('Jinja patch:')
-    print('==============')
-    print(pbuild.jinja_patch)
-
-    print('Facters:')
-    print('========')
-    facts = pbuild.gather_facts('ubuntu:latest')
-
-    print(facts['osfamily'])
+    command_line_interface()
 
     sys.exit(0)
 
