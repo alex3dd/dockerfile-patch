@@ -3,7 +3,7 @@
 # facts: gather system facts (like osfamily).
 #
 # Author: Asher256 <asher256@gmail.com>
-# Github repo: https://github.com/Asher256/docker-pbuild/
+# Github repo: https://github.com/Asher256/dockerfile-patch/
 # License: GPL
 #
 # This source code follows the Google style guide for shell scripts:

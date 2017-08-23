@@ -1,5 +1,5 @@
-# This Dockerfile is used to test docker-pbuild
-# Github repo: https://github.com/Asher256/docker-pbuild/
+# This Dockerfile is used to test dockerfile-patch
+# Github repo: https://github.com/Asher256/dockerfile-patch/
 
 FROM ubuntu:latest
 MAINTAINER Asher256 <asher256@gmail.com>

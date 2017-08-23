@@ -4,14 +4,14 @@
 # Author: Asher256 <asher256@gmail.com>
 # License: GPL
 #
-# Github repo: https://github.com/Asher256/docker-pbuild/
+# Github repo: https://github.com/Asher256/dockerfile-patch/
 #
 # This source code follows the PEP-8 style guide:
 # https://www.python.org/dev/peps/pep-0008/
 #
-"""docker-pbuild: patch a Dockerfile and build it!
+"""dockerfile-patch: patch a Dockerfile and build it!
 
-docker-pbuild will help you insert templatable instructions in a Dockerfile
+dockerfile-patch will help you insert templatable instructions in a Dockerfile
 after 'FROM', to build a patched version of a Dockerfile.
 
 Features:
@@ -144,7 +144,7 @@ class DockerfilePatcher(object):
             if item['instruction'] == 'FROM':
                 baseimage = item['value']
                 if baseimage in self.patches:
-                    patch_comment = '######## docker-pbuild patch for ' + \
+                    patch_comment = '######## dockerfile-patch patch for ' + \
                         item['value'] + ' ########\n'
                     result += '\n' + patch_comment + \
                         self.patches[baseimage] + '\n' + patch_comment
@@ -174,7 +174,7 @@ class DockerFact(object):
         """
         docker = Docker()
         stdout = ''
-        tmp_prefix = 'docker-pbuild-'
+        tmp_prefix = 'dockerfile-patch-'
 
         try:
             tmpfiles = {}    # the files in this dict will be deleted
@@ -331,7 +331,7 @@ def cli_patch_dockerfile(dockerfile_dir, j2_template_path, fact_scripts_paths):
     tmp_dockerfile = None
     try:
         tmp_dockerfile = tempfile.mktemp(prefix='Dockerfile.',
-                                         suffix='.docker-pbuild',
+                                         suffix='.dockerfile-patch',
                                          dir=dockerfile_dir)
         logging.info("[MAIN] Patched Dockerfile written to '%s':\n%s",
                      tmp_dockerfile,
@@ -361,7 +361,7 @@ def main():
 
     # Default parameters
     dockerfile_dir = '.'
-    j2_template_path = 'docker-pbuild.j2'
+    j2_template_path = 'dockerfile-patch.j2'
 
     # launch the pbuild script
     cli_patch_dockerfile(dockerfile_dir=dockerfile_dir,

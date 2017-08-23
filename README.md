@@ -1,16 +1,16 @@
-# docker-pbuild
+# dockerfile-patch
 
 Patch a Dockerfile and build it!
 
 - Author: Asher256 <asher256@gmail.com>
-- Github repo: https://github.com/Asher256/docker-pbuild
+- Github repo: https://github.com/Asher256/dockerfile-patch
 
 ## Dependencies
 Read 'requirements.txt'.
 
 ## Example
 
-The './docker-pbuild.p2' file:
+The './dockerfile-patch.p2' file:
 ```
 {% if osfamily == 'Debian' %}
 RUN touch /i-patched-this-container
@@ -32,12 +32,12 @@ EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
 ```
 
-And run 'docker-pbuild' with the same parameters as 'docker build':
+And run 'dockerfile-patch' with the same parameters as 'docker build':
 ```
-docker-pbuild -t test:latest
+dockerfile-patch -t test:latest
 ```
 
-The command docker-pbuild below will render the Jinja patch 'docker-pbuild.p2'
+The command dockerfile-patch below will render the Jinja patch 'dockerfile-patch.p2'
 and insert it after 'FROM' and build the docker container.
 
 This script will help you to patch/template the existing Dockerfiles in order
