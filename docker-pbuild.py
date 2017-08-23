@@ -29,41 +29,13 @@ import signal
 import gc
 import shutil
 from copy import deepcopy
-from subprocess import Popen, PIPE, CalledProcessError
+import docker
+import yaml
 from dockerfile_parse import DockerfileParser
 
 
 assert platform.system() == 'Linux', 'The operating system needs to be Linux'
 assert sys.version_info >= (3, 3), "The Python version needs to be >= 3.3"
-
-
-class Docker(object):
-    """Wrapper around 'docker' command."""
-
-    def __init__(self, timeout=None):
-        """Init the Docker class."""
-        self.timeout = timeout
-
-    def __call__(self, *args):
-        """Docstring."""
-        cmd = ['docker'] + list(args)
-        proc = Popen(cmd, stdout=PIPE)
-        (stdout, stderr) = proc.communicate(timeout=self.timeout)
-        if proc.returncode != 0:
-            raise CalledProcessError(returncode=proc.returncode,
-                                     cmd=cmd,
-                                     output=stdout,
-                                     stderr=stderr)
-
-        stdout = stdout.decode('utf-8', 'ignore')
-
-        if stderr:
-            stderr = stderr.decode('utf-8', 'ignore')
-        else:
-            # None because stdout is not PIPE
-            stderr = []
-
-        return stdout, stderr
 
 
 class Dockerfile(object):
@@ -145,8 +117,13 @@ class DockerFacter(object):
         # this jinja patch will be inserted as a patch using DockerfilePatcher
         self.jinja_patch = jinja_patch
 
-    def run_facter(self, image):
-        """Run the facter script in an image name."""
+    def gather_facts(self, image):
+        """Run the facter script in an image name.
+
+        Return: the stdout of the facter script started inside the container
+        'image'.
+
+        """
         tmp_prefix = 'docker-pbuild-'
         facter_script_name = 'facter.sh'
 
@@ -165,49 +142,46 @@ class DockerFacter(object):
 
             # create the local facter script
             with open(facter_script_path, 'w') as fhandler:
-                logging.info('[FACTER] Facter script written:\n%s',
-                             self.facter_script_content)
+                logging.info('[FACTER] Facter script written to %s:\n%s',
+                             facter_script_path, self.facter_script_content)
                 fhandler.write(self.facter_script_content)
             os.chmod(facter_script_path, 0o755)
             logging.info('[FACTER] Temporary file created: %s',
                          facter_script_path)
 
-            # Guest mount point (volume that points to the local
-            # tmpfiles['host_mpoint']
+            docker_client = docker.client.from_env()
+
+            # Guest mount point (volume that points to the local host_mpoint)
             guest_dir = os.path.join('/',
                                      os.path.basename(tmpfiles['host_mpoint']))
             logging.info('[FACTER] Volume in the running Docker container:'
                          ' %s%s', guest_dir, os.sep)
             guest_script = os.path.join(guest_dir, facter_script_name)
 
-            # tun the facter script in the Docker container
-            docker = Docker()
-            cmd = ['run', '--user', 'root', '-v',
-                   os.path.abspath(tmpfiles['host_mpoint']) + ':' + guest_dir,
-                   image, '/bin/sh', guest_script]
-            logging.info('[FACTER] Gathering facters with: docker %s',
-                         ' '.join(cmd))
-            stdout, stderr = docker(*cmd)
+            volumes = {os.path.abspath(tmpfiles['host_mpoint']): guest_dir}
+            stdout = docker_client.containers.run(image=image,
+                                                  command=['/bin/sh',
+                                                           guest_script],
+                                                  remove=True,
+                                                  stdout=True,
+                                                  volumes=volumes)
+            stdout = stdout.decode('utf-8', 'ignore')
 
-            logging.info("[FACTER] Facters returned by the script '%s' "
-                         "running on '%s':\n%s",
-                         guest_script, image, stdout)
         finally:
             for _, path in tmpfiles.items():
                 if os.path.isdir(path):
-                    logging.info('[FACTER DELETE] Deleting the temporary '
-                                 'dir tree: %s', path)
+                    logging.info('[FACTER DELETE] Temporary '
+                                 'dir deleted: %s', path)
                     shutil.rmtree(path)
                 elif os.path.exists(path):
-                    logging.info('[FACTER DELETE] Deleting the temporary '
-                                 'file: %s', path)
+                    logging.info('[FACTER DELETE] Temporary '
+                                 'file deleted: %s', path)
                     os.unlink(path)
                 else:
-                    logging.info("[FACTER WARNING] Temporary file not "
+                    logging.info("[FACTER WARNING] Temporary file wasn't "
                                  "found: %s", path)
 
-        stdout = ''
-        return stdout
+        return yaml.load(stdout)
 
 
 def garbage_collector(signum, frame):
@@ -230,11 +204,18 @@ def main():
     signal.signal(signal.SIGINT, garbage_collector)
     signal.signal(signal.SIGTERM, garbage_collector)
 
+    # First test
     facter_script = """#!/usr/bin/env sh
-if which apt-get >/dev/null 2>&1; then
-osfamily=debian
-else
+# Author: Asher256 <asher256@gmail.com>
 osfamily=unknown
+
+if which apt-get >/dev/null 2>&1; then
+    osfamily=debian
+else
+    # It is important to redirect it to stderr >&2 to avoid mixing
+    # errors with the Yaml returned by this script
+    echo "Operating system not detected." >&2
+    exit 1
 fi
 echo "osfamily: $osfamily"
 """
@@ -258,7 +239,9 @@ RUN apt-get update    # added by docker-pbuild!
 
     print('Facters:')
     print('========')
-    print(pbuild.run_facter('ubuntu:latest'))
+    facts = pbuild.gather_facts('ubuntu:latest')
+
+    print(facts['osfamily'])
 
     sys.exit(0)
 
