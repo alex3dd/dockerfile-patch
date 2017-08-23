@@ -2,7 +2,8 @@
 
 Patch a Dockerfile and build it!
 
-- Author: Asher256 <asher256@gmail.com>
+- Author: Asher256
+- Email: asher256@gmail.com
 - Github repo: https://github.com/Asher256/dockerfile-patch
 
 ## Dependencies
