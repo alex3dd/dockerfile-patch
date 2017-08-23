@@ -31,7 +31,6 @@ import gc
 import shutil
 from collections import OrderedDict
 from copy import deepcopy
-from pprint import pprint  # noqa
 from subprocess import Popen, CalledProcessError
 import yaml
 from dockerfile_parse import DockerfileParser
@@ -229,7 +228,7 @@ class DockerFact(object):
             guest_main_script = os.path.join(guest_dir, main_script_name)
 
             volume = os.path.abspath(tmpfiles['host_mpoint']) + ':' + guest_dir
-            command = ['run',  '-v', volume, image, '/bin/sh',
+            command = ['run', '-v', volume, image, '/bin/sh',
                        guest_main_script]
 
             docker(command)
