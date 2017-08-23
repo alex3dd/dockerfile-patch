@@ -24,6 +24,10 @@ import sys
 import os
 import logging
 import platform
+import tempfile
+import signal
+import gc
+import shutil
 from copy import deepcopy
 from subprocess import Popen, PIPE, CalledProcessError
 from dockerfile_parse import DockerfileParser
@@ -51,10 +55,10 @@ class Docker(object):
                                      output=stdout,
                                      stderr=stderr)
 
-        stdout = stdout.decode('utf-8', 'ignore').splitlines()
+        stdout = stdout.decode('utf-8', 'ignore')
 
         if stderr:
-            stderr = stderr.decode('utf-8', 'ignore').splitlines()
+            stderr = stderr.decode('utf-8', 'ignore')
         else:
             # None because stdout is not PIPE
             stderr = []
@@ -136,37 +140,85 @@ class DockerFacter(object):
         """Build a Yaml."""
         # this script will start inside any container to retrieve facts
         # it needs to be a /bin/sh script
-        self.facter_script = facter_script
+        self.facter_script_content = facter_script
 
         # this jinja patch will be inserted as a patch using DockerfilePatcher
         self.jinja_patch = jinja_patch
 
     def run_facter(self, image):
         """Run the facter script in an image name."""
+        tmp_prefix = 'docker-pbuild-'
+        facter_script_name = 'facter.sh'
 
-        # TODO: randomize the temporary variables + clean them
-        host_dir = 'tmpdir'
-        host_script_name = 'patch.pbuild'
-        host_script = os.path.join(host_dir, host_script_name)
-        guest_dir = '/pbuild'
-        guest_script = os.path.join(guest_dir, host_script_name)
+        try:
+            tmpfiles = {}    # the files in this dict will be deleted
 
-        # put self.facter_script's content in a file
-        os.makedirs(host_dir, exist_ok=True)
-        with open(host_script, 'w') as fhandler:
-            logging.info('Facter script written:\n%s',
-                         self.facter_script)
-            fhandler.write(self.facter_script)
-        os.chmod(host_script, 0o755)
+            # create a temporary directory that will contain the facter script
+            tmpfiles['host_mpoint'] = tempfile.mkdtemp(suffix='.tmp',
+                                                       prefix=tmp_prefix,
+                                                       dir='.')
+            logging.info('[FACTER] Temporary dir created: %s%s',
+                         tmpfiles['host_mpoint'], os.sep)
 
-        # tun the facter script in the Docker container
-        docker = Docker()
-        cmd = ['run', '-v', os.path.abspath(host_dir) + ':' + guest_dir,
-               image, '/bin/sh', guest_script]
-        stdout, stderr = docker(*cmd)
-        logging.info('Gathering facters with: docker %s', ' '.join(cmd))
+            facter_script_path = os.path.join(tmpfiles['host_mpoint'],
+                                              facter_script_name)
 
+            # create the local facter script
+            with open(facter_script_path, 'w') as fhandler:
+                logging.info('[FACTER] Facter script written:\n%s',
+                             self.facter_script_content)
+                fhandler.write(self.facter_script_content)
+            os.chmod(facter_script_path, 0o755)
+            logging.info('[FACTER] Temporary file created: %s',
+                         facter_script_path)
+
+            # Guest mount point (volume that points to the local
+            # tmpfiles['host_mpoint']
+            guest_dir = os.path.join('/',
+                                     os.path.basename(tmpfiles['host_mpoint']))
+            logging.info('[FACTER] Volume in the running Docker container:'
+                         ' %s%s', guest_dir, os.sep)
+            guest_script = os.path.join(guest_dir, facter_script_name)
+
+            # tun the facter script in the Docker container
+            docker = Docker()
+            cmd = ['run', '--user', 'root', '-v',
+                   os.path.abspath(tmpfiles['host_mpoint']) + ':' + guest_dir,
+                   image, '/bin/sh', guest_script]
+            logging.info('[FACTER] Gathering facters with: docker %s',
+                         ' '.join(cmd))
+            stdout, stderr = docker(*cmd)
+
+            logging.info("[FACTER] Facters returned by the script '%s' "
+                         "running on '%s':\n%s",
+                         guest_script, image, stdout)
+        finally:
+            for _, path in tmpfiles.items():
+                if os.path.isdir(path):
+                    logging.info('[FACTER DELETE] Deleting the temporary '
+                                 'dir tree: %s', path)
+                    shutil.rmtree(path)
+                elif os.path.exists(path):
+                    logging.info('[FACTER DELETE] Deleting the temporary '
+                                 'file: %s', path)
+                    os.unlink(path)
+                else:
+                    logging.info("[FACTER WARNING] Temporary file not "
+                                 "found: %s", path)
+
+        stdout = ''
         return stdout
+
+
+def garbage_collector(signum, frame):
+    """Garbage collection."""
+    gc.collect()
+    logging.debug("%s: Garbage collection done.", sys.argv[0])
+    if signum == signal.SIGINT:
+        sys.stderr.write("Interrupted.\n".format())
+        sys.exit(1)
+    else:
+        sys.exit(0)
 
 
 def main():
@@ -174,6 +226,9 @@ def main():
 
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(message)s')
+
+    signal.signal(signal.SIGINT, garbage_collector)
+    signal.signal(signal.SIGTERM, garbage_collector)
 
     facter_script = """#!/usr/bin/env sh
 if which apt-get >/dev/null 2>&1; then
@@ -194,7 +249,7 @@ RUN apt-get update    # added by docker-pbuild!
 
     print('Facter script:')
     print('==============')
-    print(pbuild.facter_script)
+    print(pbuild.facter_script_content)
 
     print()
     print('Jinja patch:')
@@ -203,8 +258,7 @@ RUN apt-get update    # added by docker-pbuild!
 
     print('Facters:')
     print('========')
-    print('FACTERS ===>' + pbuild.run_facter('ubuntu:latest'))
-    print('END FACTERS')
+    print(pbuild.run_facter('ubuntu:latest'))
 
     sys.exit(0)
 
