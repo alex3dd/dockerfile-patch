@@ -357,7 +357,7 @@ def main():
 
     # default facts gatherer
     script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-    default_facts = os.path.join(script_dir, 'default_facts.sh')
+    default_facts = os.path.join(script_dir, 'default-facts.sh')
 
     # Default parameters
     dockerfile_dir = '.'
