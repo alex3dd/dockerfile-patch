@@ -25,7 +25,6 @@ import os
 import logging
 import platform
 from copy import deepcopy
-from subprocess import check_call
 from subprocess import Popen, PIPE, CalledProcessError
 from dockerfile_parse import DockerfileParser
 
