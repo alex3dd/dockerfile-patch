@@ -33,6 +33,7 @@ from copy import deepcopy
 import docker
 import yaml
 from dockerfile_parse import DockerfileParser
+from jinja2 import Template
 
 
 assert platform.system() == 'Linux', 'The operating system needs to be Linux'
@@ -50,7 +51,8 @@ class DockerfilePatcher(object):
 
     def load(self, path):
         """Load a Dockerfile."""
-        logging.info('[DOCKERFILE PATCHER] Loading: %s', path)
+        logging.info('[DOCKERFILE PATCHER] Loading: %s',
+                     os.path.join(path, 'Dockerfile'))
         dfp = DockerfileParser(path=path)
         self.structure = deepcopy(dfp.structure)
 
@@ -63,6 +65,7 @@ class DockerfilePatcher(object):
         """Get all values of FROM in the Dockerfile."""
 
         result = []
+        image_names = set()
         for item in self.structure:
             if item['instruction'].upper() != 'FROM':
                 continue
@@ -71,8 +74,10 @@ class DockerfilePatcher(object):
                 continue
 
             result.append(item)
+            image_names.add(item['value'])
 
-        logging.info("Images found in the Dockerfile: %s", str(result))
+        logging.info("[DOCKERFILE PATCHER] Base images in the Dockerfile: %s",
+                     str(list(image_names)))
         return result
 
     def set_patch(self, image, content):
@@ -80,6 +85,8 @@ class DockerfilePatcher(object):
         if image in self.patches:
             raise KeyError("The image '{}' exists already.".format(image))
 
+        logging.info("[DOCKERFILE PATCHER] Patch for '%s' created:\n%s",
+                     image, content)
         self.patches[image.strip()] = content
 
     def to_str(self, patch=True):
@@ -111,16 +118,11 @@ class DockerfilePatcher(object):
 class DockerFacter(object):
     """Patch and build a Dockerfile."""
 
-    def __init__(self, facter_script, jinja_patch):
+    def __init__(self, facter_script):
         """Build a Yaml."""
         # this script will start inside any container to retrieve facts
         # it needs to be a /bin/sh script
         self.facter_script_content = facter_script
-
-        # this jinja patch will be inserted as a patch using DockerfilePatcher
-        self.jinja_patch = jinja_patch
-        logging.info('Jinja patch loaded:\n%s\n',
-                     self.jinja_patch)
 
     def gather_facts(self, image):
         """Run the facter script in an image name.
@@ -139,7 +141,7 @@ class DockerFacter(object):
             tmpfiles['host_mpoint'] = tempfile.mkdtemp(suffix='.tmp',
                                                        prefix=tmp_prefix,
                                                        dir='.')
-            logging.info('[FACTER] Temporary dir created: %s%s',
+            logging.info('[FACTS] Temporary dir created: %s%s',
                          tmpfiles['host_mpoint'], os.sep)
 
             facter_script_path = os.path.join(tmpfiles['host_mpoint'],
@@ -147,7 +149,7 @@ class DockerFacter(object):
 
             # create the local facter script
             with open(facter_script_path, 'w') as fhandler:
-                logging.info('[FACTER] Facter script written to %s:\n%s',
+                logging.info('[FACTS] Facter script written to %s:\n%s',
                              facter_script_path, self.facter_script_content)
                 fhandler.write(self.facter_script_content)
             os.chmod(facter_script_path, 0o755)
@@ -157,7 +159,7 @@ class DockerFacter(object):
             # Guest mount point (volume that points to the local host_mpoint)
             guest_dir = os.path.join('/',
                                      os.path.basename(tmpfiles['host_mpoint']))
-            logging.info('[FACTER] Volume in the running Docker container:'
+            logging.info('[FACTS] Volume in the running Docker container:'
                          ' %s%s', guest_dir, os.sep)
             guest_script = os.path.join(guest_dir, facter_script_name)
 
@@ -173,15 +175,15 @@ class DockerFacter(object):
         finally:
             for _, path in tmpfiles.items():
                 if os.path.isdir(path):
-                    logging.info('[FACTER DELETE] Temporary '
+                    logging.info('[FACTS DELETE] Temporary '
                                  'dir deleted: %s', path)
                     shutil.rmtree(path)
                 elif os.path.exists(path):
-                    logging.info('[FACTER DELETE] Temporary '
+                    logging.info('[FACTS DELETE] Temporary '
                                  'file deleted: %s', path)
                     os.unlink(path)
                 else:
-                    logging.info("[FACTER WARNING] Temporary file wasn't "
+                    logging.info("[FACTS WARNING] Temporary file wasn't "
                                  "found: %s", path)
 
         facts = yaml.load(stdout)
@@ -205,21 +207,37 @@ def command_line_interface():
     """The command line interface."""
     # Load the Dockerfile
     dockerfile = DockerfilePatcher()
-    dockerfile.load('Dockerfile.test')
-
-    images = dockerfile.get_images()
+    dockerfile.load('./test')
 
     # Load the scripts
     with open('facts.sh', 'r') as fhandler:
         facter_script = fhandler.read()
 
-    with open('jinja_test.j2', 'r') as fhandler:
+    with open('test/patch.j2', 'r') as fhandler:
         jinja_patch = fhandler.read()
+        logging.info('[FACTS] Jinja patch loaded:\n%s\n',
+                     jinja_patch)
 
-    # Load the facters
-    pbuild = DockerFacter(facter_script=facter_script,
-                          jinja_patch=jinja_patch)
-    facts = pbuild.gather_facts('ubuntu:latest')
+    dfacter = DockerFacter(facter_script=facter_script)
+
+    # Gathering facts from all Docker images
+    facts = {}
+    for item in dockerfile.get_images():
+        image_name = item['value']
+        if image_name in facts:
+            # Already gathered
+            continue
+
+        logging.info('[MAIN] Gathering facts from the image: %s', image_name)
+        facts[image_name] = dfacter.gather_facts(image_name)
+
+        # Creating the patch for this image
+        template = Template(jinja_patch)
+        dockerfile.set_patch(image_name, template.render(**facts[image_name]))
+
+    # Final result
+    patched_dockerfile = dockerfile.to_str()
+    logging.info('[MAIN] FINAL PATCHED Dockerfile:\n%s', patched_dockerfile)
 
 
 def main():

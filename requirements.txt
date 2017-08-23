@@ -1,3 +1,4 @@
 dockerfile-parse
 docker
 PyYAML
+Jinja2
