@@ -271,7 +271,6 @@ class DockerFact(object):
 
 def garbage_collector(signum, frame):
     """Garbage collection."""
-    print('GARBAGE!')
     gc.collect()
     logging.debug("%s: Garbage collection done.", sys.argv[0])
     if signum == signal.SIGINT:
@@ -334,6 +333,10 @@ def main():
 
     logging.basicConfig(level=logging.ERROR,
                         format='%(asctime)s %(message)s')
+
+    # garbage collector
+    signal.signal(signal.SIGINT, garbage_collector)
+    signal.signal(signal.SIGTERM, garbage_collector)
 
     # default facts gatherer
     script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
