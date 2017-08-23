@@ -271,6 +271,7 @@ class DockerFact(object):
 
 def garbage_collector(signum, frame):
     """Garbage collection."""
+    print('GARBAGE!')
     gc.collect()
     logging.debug("%s: Garbage collection done.", sys.argv[0])
     if signum == signal.SIGINT:
@@ -343,12 +344,18 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(message)s')
 
-    signal.signal(signal.SIGINT, garbage_collector)
-    signal.signal(signal.SIGTERM, garbage_collector)
+    # default facts gatherer
+    script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    default_facts = os.path.join(script_dir, 'default_facts.sh')
 
-    cli_patch_dockerfile(dockerfile_dir='test',
-                         j2_template='./test/docker-pbuild.j2',
-                         fact_scripts_paths=['./facts.sh'])
+    # Default parameters
+    dockerfile_dir = '.'
+    j2_template = 'docker-pbuild.j2'
+
+    # launch the pbuild script
+    cli_patch_dockerfile(dockerfile_dir=dockerfile_dir,
+                         j2_template=j2_template,
+                         fact_scripts_paths=[default_facts])
 
     sys.exit(0)
 
