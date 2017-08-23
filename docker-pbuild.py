@@ -281,22 +281,33 @@ def garbage_collector(signum, frame):
         sys.exit(0)
 
 
-def cli_patch_dockerfile(dockerfile_dir, j2_template, fact_scripts_paths):
+def cli_patch_dockerfile(dockerfile_dir, j2_template_path, fact_scripts_paths):
     """The command line interface."""
     dockerfile = DockerfilePatcher()
     docker_facter = DockerFact()
 
     # Load the Dockerfile
-    dockerfile.load(dockerfile_dir)
+    try:
+        dockerfile.load(dockerfile_dir)
+    except OSError:
+        dockerfile_path = os.path.join(dockerfile_dir, 'Dockerfile')
+        sys.stderr.write("ERROR: unable to load the Dockerfile "
+                         "located in '{}'\n".format(dockerfile_path))
+        sys.exit(1)
 
     # Load the scripts' content into a dict {'path': 'script_content'}
     for item in fact_scripts_paths:
         docker_facter.add_fact_script(path=item)
 
-    with open(j2_template, 'r') as fhandler:
-        jinja_patch = fhandler.read()
-        logging.info('[FACTS] Jinja patch loaded:\n%s\n',
-                     jinja_patch)
+    try:
+        with open(j2_template_path, 'r') as fhandler:
+            jinja_patch = fhandler.read()
+            logging.info('[FACTS] Jinja patch loaded:\n%s\n',
+                         jinja_patch)
+    except OSError:
+        sys.stderr.write("ERROR: unable to load the Jinja2 template "
+                         "located in '{}'\n".format(j2_template_path))
+        sys.exit(1)
 
     # Gathering facts from all Docker images
     facts = {}
@@ -350,11 +361,11 @@ def main():
 
     # Default parameters
     dockerfile_dir = '.'
-    j2_template = 'docker-pbuild.j2'
+    j2_template_path = 'docker-pbuild.j2'
 
     # launch the pbuild script
     cli_patch_dockerfile(dockerfile_dir=dockerfile_dir,
-                         j2_template=j2_template,
+                         j2_template_path=j2_template_path,
                          fact_scripts_paths=[default_facts])
 
     sys.exit(0)
