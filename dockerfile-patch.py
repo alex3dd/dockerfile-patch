@@ -240,9 +240,9 @@ class DockerFact(object):
                 with open(facts_yaml, 'r') as fhandler:
                     stdout = fhandler.read()
             except IOError:
-                logging.error("[WARNING] The fact scripts "
-                              "didn't write any fact in '%s'.",
-                              facts_yaml)
+                logging.info("[WARNING] The fact scripts "
+                             "didn't write any fact in '%s'.",
+                             facts_yaml)
 
         finally:
             for _, path in tmpfiles.items():
@@ -261,7 +261,7 @@ class DockerFact(object):
         facts = yaml.load(stdout)
 
         if not facts:
-            logging.error("[FACTS] ERROR: unable to gather facts.")
+            logging.info("[FACTS] ERROR: unable to gather facts.")
             sys.exit(1)
 
         logging.info('[FACTS] System facts gathered: %s', str(facts))
@@ -281,7 +281,7 @@ def garbage_collector(signum, frame):
         sys.exit(0)
 
 
-def cli_patch_dockerfile(dockerfile_dir, j2_template_path, fact_scripts_paths):
+def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
     """The command line interface."""
     dockerfile = DockerfilePatcher()
     docker_facter = DockerFact()
@@ -325,34 +325,13 @@ def cli_patch_dockerfile(dockerfile_dir, j2_template_path, fact_scripts_paths):
         dockerfile.set_patch(image_name, template.render(**facts[image_name]))
 
     # Final result
-    patched_dockerfile = dockerfile.to_str()
-
-    # Write the result to the Dockerfile.pbuild-patch
-    tmp_dockerfile = None
-    try:
-        tmp_dockerfile = tempfile.mktemp(prefix='Dockerfile.',
-                                         suffix='.dockerfile-patch',
-                                         dir=dockerfile_dir)
-        logging.info("[MAIN] Patched Dockerfile written to '%s':\n%s",
-                     tmp_dockerfile,
-                     patched_dockerfile)
-        with open(tmp_dockerfile, 'w') as fhandler:
-            fhandler.write(patched_dockerfile)
-
-        cmd = ['docker', 'build', '-f', tmp_dockerfile, dockerfile_dir] + \
-            sys.argv[1:]
-        logging.info("[MAIN] Run command: %s", ' '.join(cmd))
-        check_call(cmd)
-    finally:
-        if tmp_dockerfile and os.path.isfile(tmp_dockerfile):
-            logging.info('[MAIN] Temporary file deleted: %s', tmp_dockerfile)
-            os.unlink(tmp_dockerfile)
+    print(dockerfile.to_str())
 
 
 def main():
     """The program starts here."""
 
-    logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(level=logging.ERROR,
                         format='%(asctime)s %(message)s')
 
     # default facts gatherer
@@ -364,9 +343,9 @@ def main():
     j2_template_path = 'dockerfile-patch.j2'
 
     # launch the pbuild script
-    cli_patch_dockerfile(dockerfile_dir=dockerfile_dir,
-                         j2_template_path=j2_template_path,
-                         fact_scripts_paths=[default_facts])
+    dockerfile_patch(dockerfile_dir=dockerfile_dir,
+                     j2_template_path=j2_template_path,
+                     fact_scripts_paths=[default_facts])
 
     sys.exit(0)
 
