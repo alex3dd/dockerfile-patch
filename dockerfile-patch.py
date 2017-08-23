@@ -32,7 +32,7 @@ import shutil
 from collections import OrderedDict
 from copy import deepcopy
 from pprint import pprint  # noqa
-from subprocess import check_call, Popen, CalledProcessError
+from subprocess import Popen, CalledProcessError
 import yaml
 from dockerfile_parse import DockerfileParser
 from jinja2 import Template
@@ -304,9 +304,10 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
             jinja_patch = fhandler.read()
             logging.info('[FACTS] Jinja patch loaded:\n%s\n',
                          jinja_patch)
-    except OSError:
+    except OSError as err:
         sys.stderr.write("ERROR: unable to load the Jinja2 template "
-                         "located in '{}'\n".format(j2_template_path))
+                         "located in '{}'. {}\n".format(j2_template_path,
+                                                        str(err)))
         sys.exit(1)
 
     # Gathering facts from all Docker images

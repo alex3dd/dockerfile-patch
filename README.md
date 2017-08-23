@@ -11,7 +11,7 @@ Read 'requirements.txt'.
 
 ## Example
 
-The './dockerfile-patch.p2' file:
+The './dockerfile-patch.j2' file:
 ```
 {% if osfamily == 'Debian' %}
 RUN touch /i-patched-this-container
@@ -38,7 +38,7 @@ And run 'dockerfile-patch' with the same parameters as 'docker build':
 dockerfile-patch -t test:latest
 ```
 
-The command dockerfile-patch below will render the Jinja patch 'dockerfile-patch.p2'
+The command dockerfile-patch below will render the Jinja patch 'dockerfile-patch.j2'
 and insert it after 'FROM' and build the docker container.
 
 This script will help you to patch/template the existing Dockerfiles in order
