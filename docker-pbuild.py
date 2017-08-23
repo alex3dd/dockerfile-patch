@@ -29,9 +29,10 @@ import tempfile
 import signal
 import gc
 import shutil
+from collections import OrderedDict
 from copy import deepcopy
-from subprocess import check_call
-import docker
+from pprint import pprint  # noqa
+from subprocess import check_call, Popen, CalledProcessError
 import yaml
 from dockerfile_parse import DockerfileParser
 from jinja2 import Template
@@ -39,6 +40,41 @@ from jinja2 import Template
 
 assert platform.system() == 'Linux', 'The operating system needs to be Linux'
 assert sys.version_info >= (3, 3), "The Python version needs to be >= 3.3"
+
+
+class Docker(object):
+    """Wrapper around 'docker' command."""
+
+    def __init__(self, timeout=None):
+        """Init the Docker class."""
+        self.timeout = timeout
+
+    def __call__(self, args, *popen_args, **popen_kwargs):
+        """Same as subprocess.Popen() (except the first one: args)."""
+        assert isinstance(args, list), \
+            "The type of 'args' needs to be 'list'"
+        cmd = ['docker'] + args
+        logging.info('[RUN COMMAND] %s', ' '.join(cmd))
+        proc = Popen(args=cmd, *popen_args, **popen_kwargs)
+        (stdout, stderr) = proc.communicate(timeout=self.timeout)
+        if proc.returncode != 0:
+            raise CalledProcessError(returncode=proc.returncode,
+                                     cmd=cmd,
+                                     output=stdout,
+                                     stderr=stderr)
+
+        if stdout:
+            stdout = stdout.decode('utf-8', 'ignore')
+        else:
+            stdout = ''
+
+        if stderr:
+            stderr = stderr.decode('utf-8', 'ignore')
+        else:
+            # None because stdout is not PIPE
+            stderr = ''
+
+        return stdout, stderr
 
 
 class DockerfilePatcher(object):
@@ -116,14 +152,18 @@ class DockerfilePatcher(object):
         return result
 
 
-class DockerFacter(object):
+class DockerFact(object):
     """Patch and build a Dockerfile."""
 
-    def __init__(self, facter_script):
+    def __init__(self):
         """Build a Yaml."""
-        # this script will start inside any container to retrieve facts
-        # it needs to be a /bin/sh script
-        self.facter_script_content = facter_script
+        # List of script paths and content: {'path': 'content'}
+        self.fact_scripts_paths = OrderedDict()
+
+    def add_fact_script(self, path):
+        """Docstring."""
+        with open(path, 'r') as fhandler:
+            self.fact_scripts_paths[os.path.abspath(path)] = fhandler.read()
 
     def gather_facts(self, image):
         """Run the facter script in an image name.
@@ -132,8 +172,9 @@ class DockerFacter(object):
         'image'.
 
         """
+        docker = Docker()
+        stdout = ''
         tmp_prefix = 'docker-pbuild-'
-        facter_script_name = 'facter.sh'
 
         try:
             tmpfiles = {}    # the files in this dict will be deleted
@@ -145,39 +186,69 @@ class DockerFacter(object):
             logging.info('[FACTS] Temporary dir created: %s%s',
                          tmpfiles['host_mpoint'], os.sep)
 
-            facter_script_path = os.path.join(tmpfiles['host_mpoint'],
-                                              facter_script_name)
-
-            # create the local facter script
-            with open(facter_script_path, 'w') as fhandler:
-                logging.info('[FACTS] Facter script written to %s:\n%s',
-                             facter_script_path, self.facter_script_content)
-                fhandler.write(self.facter_script_content)
-            os.chmod(facter_script_path, 0o755)
-
-            docker_client = docker.client.from_env()
-
             # Guest mount point (volume that points to the local host_mpoint)
             guest_dir = os.path.join('/',
                                      os.path.basename(tmpfiles['host_mpoint']))
             logging.info('[FACTS] Volume in the running Docker container:'
                          ' %s%s', guest_dir, os.sep)
-            guest_script = os.path.join(guest_dir, facter_script_name)
 
-            volumes = {os.path.abspath(tmpfiles['host_mpoint']): guest_dir}
-            stdout = docker_client.containers.run(image=image,
-                                                  command=['/bin/sh',
-                                                           guest_script],
-                                                  remove=True,
-                                                  stdout=True,
-                                                  volumes=volumes)
-            stdout = stdout.decode('utf-8', 'ignore')
+            # Write all scripts to the directory
+            index = 0
+            guest_scripts = []
+            for scr_path, scr_content in self.fact_scripts_paths.items():
+                index += 1
+                facter_script_name = str(index).zfill(6) + "-" + \
+                    os.path.basename(scr_path) + '-fact'
+                facter_script_path = os.path.join(tmpfiles['host_mpoint'],
+                                                  facter_script_name)
+
+                with open(facter_script_path, 'w') as fhandler:
+                    logging.info('[FACTS] Fact script written to %s:\n%s',
+                                 facter_script_path,
+                                 scr_content)
+                    fhandler.write(scr_content)
+                os.chmod(facter_script_path, 0o755)
+
+                guest_scripts.append(os.path.join(guest_dir,
+                                                  facter_script_name))
+
+            # create the main script (this script will run all others)p
+            main_script_name = 'main_facter.sh'
+            main_script_path = os.path.join(tmpfiles['host_mpoint'],
+                                            main_script_name)
+            main_script_content = "#!/bin/sh\n"
+            main_script_content += 'cd "' + guest_dir + '" || exit 1\n'
+            for item in guest_scripts:
+                main_script_content += item + " || exit 1\n"
+            with open(main_script_path, 'w') as fhandler:
+                logging.info('[FACTS] Main facter script written to %s:\n%s',
+                             main_script_path,
+                             main_script_content)
+                fhandler.write(main_script_content)
+            os.chmod(main_script_path, 0o755)
+            guest_main_script = os.path.join(guest_dir, main_script_name)
+
+            volume = os.path.abspath(tmpfiles['host_mpoint']) + ':' + guest_dir
+            command = ['run',  '-v', volume, image, '/bin/sh',
+                       guest_main_script]
+
+            docker(command)
+
+            facts_yaml = os.path.join(tmpfiles['host_mpoint'],
+                                      'facts.yaml')
+            try:
+                with open(facts_yaml, 'r') as fhandler:
+                    stdout = fhandler.read()
+            except IOError:
+                logging.error("[WARNING] The fact scripts "
+                              "didn't write any fact in '%s'.",
+                              facts_yaml)
 
         finally:
             for _, path in tmpfiles.items():
                 if os.path.isdir(path):
                     logging.info('[FACTS DELETE] Temporary '
-                                 'dir deleted: %s', path)
+                                 'dir deleted: %s%s', path, os.sep)
                     shutil.rmtree(path)
                 elif os.path.exists(path):
                     logging.info('[FACTS DELETE] Temporary '
@@ -188,6 +259,11 @@ class DockerFacter(object):
                                  "found: %s", path)
 
         facts = yaml.load(stdout)
+
+        if not facts:
+            logging.error("[FACTS] ERROR: unable to gather facts.")
+            sys.exit(1)
+
         logging.info('[FACTS] System facts gathered: %s', str(facts))
 
         return facts
@@ -204,22 +280,22 @@ def garbage_collector(signum, frame):
         sys.exit(0)
 
 
-def command_line_interface(dockerfile_dir, j2_template, facts_script):
+def cli_patch_dockerfile(dockerfile_dir, j2_template, fact_scripts_paths):
     """The command line interface."""
-    # Load the Dockerfile
     dockerfile = DockerfilePatcher()
+    docker_facter = DockerFact()
+
+    # Load the Dockerfile
     dockerfile.load(dockerfile_dir)
 
-    # Load the scripts
-    with open(facts_script, 'r') as fhandler:
-        facter_script = fhandler.read()
+    # Load the scripts' content into a dict {'path': 'script_content'}
+    for item in fact_scripts_paths:
+        docker_facter.add_fact_script(path=item)
 
     with open(j2_template, 'r') as fhandler:
         jinja_patch = fhandler.read()
         logging.info('[FACTS] Jinja patch loaded:\n%s\n',
                      jinja_patch)
-
-    dfacter = DockerFacter(facter_script=facter_script)
 
     # Gathering facts from all Docker images
     facts = {}
@@ -230,7 +306,7 @@ def command_line_interface(dockerfile_dir, j2_template, facts_script):
             continue
 
         logging.info('[MAIN] Gathering facts from the image: %s', image_name)
-        facts[image_name] = dfacter.gather_facts(image_name)
+        facts[image_name] = docker_facter.gather_facts(image_name)
 
         # Creating the patch for this image
         template = Template(jinja_patch)
@@ -270,9 +346,9 @@ def main():
     signal.signal(signal.SIGINT, garbage_collector)
     signal.signal(signal.SIGTERM, garbage_collector)
 
-    command_line_interface(dockerfile_dir='test',
-                           j2_template='./test/docker-pbuild.j2',
-                           facts_script='./facts.sh')
+    cli_patch_dockerfile(dockerfile_dir='test',
+                         j2_template='./test/docker-pbuild.j2',
+                         fact_scripts_paths=['./facts.sh'])
 
     sys.exit(0)
 

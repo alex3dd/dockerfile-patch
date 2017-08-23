@@ -34,9 +34,13 @@ if [ "$operatingsystem" = "Linux" ]; then
 fi
 
 # Output in the Yaml format
-echo "osfamily: $osfamily"
-echo "operatingsystem: $operatingsystem"
-echo "kernelrelease: $kernelrelease"
-echo "architecture: $architecture"
+{
+  echo "osfamily: $osfamily"
+  echo "operatingsystem: $operatingsystem"
+  echo "kernelrelease: $kernelrelease"
+  echo "architecture: $architecture"
+} >> facts.yaml
+
+exit 0
 
 # vim:ai:et:sw=2:ts=2:sts=2:tw=0:fenc=utf-8
