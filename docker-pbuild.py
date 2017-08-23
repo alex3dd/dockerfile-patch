@@ -30,6 +30,7 @@ import signal
 import gc
 import shutil
 from copy import deepcopy
+from subprocess import check_call
 import docker
 import yaml
 from dockerfile_parse import DockerfileParser
@@ -203,17 +204,17 @@ def garbage_collector(signum, frame):
         sys.exit(0)
 
 
-def command_line_interface():
+def command_line_interface(dockerfile_dir, j2_template, facts_script):
     """The command line interface."""
     # Load the Dockerfile
     dockerfile = DockerfilePatcher()
-    dockerfile.load('./test')
+    dockerfile.load(dockerfile_dir)
 
     # Load the scripts
-    with open('facts.sh', 'r') as fhandler:
+    with open(facts_script, 'r') as fhandler:
         facter_script = fhandler.read()
 
-    with open('test/patch.j2', 'r') as fhandler:
+    with open(j2_template, 'r') as fhandler:
         jinja_patch = fhandler.read()
         logging.info('[FACTS] Jinja patch loaded:\n%s\n',
                      jinja_patch)
@@ -237,7 +238,27 @@ def command_line_interface():
 
     # Final result
     patched_dockerfile = dockerfile.to_str()
-    logging.info('[MAIN] FINAL PATCHED Dockerfile:\n%s', patched_dockerfile)
+
+    # Write the result to the Dockerfile.pbuild-patch
+    tmp_dockerfile = None
+    try:
+        tmp_dockerfile = tempfile.mktemp(prefix='Dockerfile.',
+                                         suffix='.docker-pbuild',
+                                         dir=dockerfile_dir)
+        logging.info("[MAIN] Patched Dockerfile written to '%s':\n%s",
+                     tmp_dockerfile,
+                     patched_dockerfile)
+        with open(tmp_dockerfile, 'w') as fhandler:
+            fhandler.write(patched_dockerfile)
+
+        cmd = ['docker', 'build', '-f', tmp_dockerfile, dockerfile_dir] + \
+            sys.argv[1:]
+        logging.info("[MAIN] Run command: %s", ' '.join(cmd))
+        check_call(cmd)
+    finally:
+        if tmp_dockerfile and os.path.isfile(tmp_dockerfile):
+            logging.info('[MAIN] Temporary file deleted: %s', tmp_dockerfile)
+            os.unlink(tmp_dockerfile)
 
 
 def main():
@@ -249,7 +270,9 @@ def main():
     signal.signal(signal.SIGINT, garbage_collector)
     signal.signal(signal.SIGTERM, garbage_collector)
 
-    command_line_interface()
+    command_line_interface(dockerfile_dir='test',
+                           j2_template='./test/docker-pbuild.j2',
+                           facts_script='./facts.sh')
 
     sys.exit(0)
 
@@ -258,4 +281,5 @@ if __name__ == '__main__':
     main()
 
 
+# quicktest: python3 % -t test:test
 # vim:ai:et:sw=4:ts=4:sts=4:tw=78:fenc=utf-8
