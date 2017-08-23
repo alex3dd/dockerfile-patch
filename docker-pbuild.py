@@ -4,57 +4,133 @@
 # Author: Asher256 <asher256@gmail.com>
 # License: GPL
 #
+# Github repo: https://github.com/Asher256/docker-pbuild
+#
 # This source code follows the PEP-8 style guide:
 # https://www.python.org/dev/peps/pep-0008/
 #
-"""Patch a Dockerbuild and build it!"""
+"""docker-pbuild: patch a Dockerfile and build it!
+
+docker-pbuild will help you insert templatable instructions in a Dockerfile
+after 'FROM', to build a patched version of a Dockerfile.
+
+Features:
+    - Load a Dockerfile and patch it
+
+"""
 
 
 import sys
 import os
 import logging
 import platform
+from copy import deepcopy
 from subprocess import check_call
+from subprocess import Popen, PIPE, CalledProcessError
+from dockerfile_parse import DockerfileParser
 
 
 assert platform.system() == 'Linux', 'The operating system needs to be Linux'
 assert sys.version_info >= (3, 3), "The Python version needs to be >= 3.3"
 
 
-# DockerPatchBuild will split the file into begin (before DEFAULT_RULE
-# Dockerfile commands) and after. The patch will be inserted between the two
-# parts.
-DEFAULT_RULE = ['CMD', 'ENTRYPOINT']
+class Docker(object):
+    """Wrapper around 'docker' command."""
+
+    def __init__(self, timeout=None):
+        """Init the Docker class."""
+        self.timeout = timeout
+
+    def __call__(self, *args):
+        """Docstring."""
+        cmd = ['docker'] + list(args)
+        proc = Popen(cmd, stdout=PIPE)
+        (stdout, stderr) = proc.communicate(timeout=self.timeout)
+        if proc.returncode != 0:
+            raise CalledProcessError(returncode=proc.returncode,
+                                     cmd=cmd,
+                                     output=stdout,
+                                     stderr=stderr)
+
+        stdout = stdout.decode('utf-8', 'ignore').splitlines()
+
+        if stderr:
+            stderr = stderr.decode('utf-8', 'ignore').splitlines()
+        else:
+            # None because stdout is not PIPE
+            stderr = []
+
+        return stdout, stderr
 
 
-class DockerfilePatcher(object):
-    """Patch a Docker build."""
+class Dockerfile(object):
+    """Load a Dockerfile and patch it."""
 
-    def __init__(self, yaml_config):
+    def __init__(self):
         """Init the class."""
-        self.before = ''
-        self.between = ''
-        self.after = ''
+        # empty DockerfileParser
+        self.structure = []
+        self.patches = {}
 
     def load(self, path):
-        """Load the Dockerfile.
+        """Load a Dockerfile."""
+        dfp = DockerfileParser(path=path)
+        self.structure = deepcopy(dfp.structure)
 
-        The Dockerfile will be split into 2 parts (before and after
-        CMD/ENTRYPOINT).
-
-        """
-        pass
-
-    def save(self, path):
+    def save(self, path, patch=True):
         """Save a patched version of the Dockerfile."""
-        pass
+        with open(path, 'w') as fhandler:
+            fhandler.write(self.to_str(patch=patch))
 
-    def patch(self, lines):
-        """Insert lines between the two splits made by self.load()."""
-        pass
+    def get_images(self, image=None):
+        """Get all values of FROM in the Dockerfile."""
+
+        result = []
+        for item in self.structure:
+            if item['instruction'].upper() != 'FROM':
+                continue
+
+            if image and item['value'] != image:
+                continue
+
+            result.append(item)
+
+        return result
+
+    def set_patch(self, image, content):
+        """Patch an image with a Dockerfile content."""
+        if image in self.patches:
+            raise KeyError("The image '{}' exists already.".format(image))
+
+        self.patches[image.strip()] = content
+
+    def to_str(self, patch=True):
+        """Return a patched version of the Dockerfile."""
+        result = ''
+
+        # the endlines of all FROM (first endline=0)
+        endlines = {}
+        for item in self.get_images():
+            endlines[item['endline']] = item['value']
+
+        for item in self.structure:
+            result += item['content']
+
+            if not patch:
+                continue
+
+            if item['instruction'] == 'FROM':
+                baseimage = item['value']
+                if baseimage in self.patches:
+                    patch_comment = '######## docker-pbuild patch for ' + \
+                        item['value'] + ' ########\n'
+                    result += '\n' + patch_comment + \
+                        self.patches[baseimage] + '\n' + patch_comment
+
+        return result
 
 
-class DockerPBuild(object):
+class DockerFacter(object):
     """Patch and build a Dockerfile."""
 
     def __init__(self, facter_script, jinja_patch):
@@ -68,38 +144,35 @@ class DockerPBuild(object):
 
     def run_facter(self, image):
         """Run the facter script in an image name."""
-        check_call(['docker', 'pull', image])
 
-        host_dir = 'tmpdir'  # TODO: randomize it
-
-        # TODO: randomize it
+        # TODO: randomize the temporary variables + clean them
+        host_dir = 'tmpdir'
         host_script_name = 'patch.pbuild'
         host_script = os.path.join(host_dir, host_script_name)
+        guest_dir = '/pbuild'
+        guest_script = os.path.join(guest_dir, host_script_name)
 
-        if not os.path.isdir(host_dir):
-            os.mkdir(host_dir)
-
+        # put self.facter_script's content in a file
+        os.makedirs(host_dir, exist_ok=True)
         with open(host_script, 'w') as fhandler:
             logging.info('Facter script written:\n%s',
                          self.facter_script)
             fhandler.write(self.facter_script)
         os.chmod(host_script, 0o755)
 
-        # TODO: create a random file
-        guest_dir = '/pbuild'
-
-        # TODO: create a random file
-        guest_script = os.path.join(guest_dir, host_script_name)
-
-        cmd = ['docker', 'run',
-               '-v', os.path.abspath(host_dir) + ':' + guest_dir,
+        # tun the facter script in the Docker container
+        docker = Docker()
+        cmd = ['run', '-v', os.path.abspath(host_dir) + ':' + guest_dir,
                image, '/bin/sh', guest_script]
-        logging.info('Run script: %s', ' '.join(cmd))
-        check_call(cmd)
+        stdout, stderr = docker(*cmd)
+        logging.info('Gathering facters with: docker %s', ' '.join(cmd))
+
+        return stdout
 
 
 def main():
     """The program starts here."""
+
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(message)s')
 
@@ -117,7 +190,7 @@ RUN apt-get update    # added by docker-pbuild!
 {% endif %}
 """
 
-    pbuild = DockerPBuild(facter_script=facter_script,
+    pbuild = DockerFacter(facter_script=facter_script,
                           jinja_patch=jinja_patch)
 
     print('Facter script:')
@@ -131,7 +204,8 @@ RUN apt-get update    # added by docker-pbuild!
 
     print('Facters:')
     print('========')
-    pbuild.run_facter('ubuntu:xenial')
+    print('FACTERS ===>' + pbuild.run_facter('ubuntu:latest'))
+    print('END FACTERS')
 
     sys.exit(0)
 
