@@ -50,6 +50,8 @@ CMD ["/usr/sbin/sshd", "-D"]
 
 ```
 
+(You can add the option --debug to the command dockerfile-patch)
+
 The command dockerfile-patch below will render the Jinja patch 'dockerfile-patch.j2'
 and insert it after 'FROM' and build the docker container.
 

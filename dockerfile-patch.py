@@ -29,6 +29,7 @@ import tempfile
 import signal
 import gc
 import shutil
+import argparse
 from collections import OrderedDict
 from copy import deepcopy
 from subprocess import Popen, CalledProcessError
@@ -327,10 +328,30 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
     print(dockerfile.to_str())
 
 
+def parse_args():
+    """Parse the arguments."""
+    description = "Patch a Dockerfile with a Jinja2 template"
+    usage = "%(prog)s [--option] [dockerfile_path]"
+    parser = argparse.ArgumentParser(description=description,
+                                     usage=usage)
+    parser.add_argument('path', type=str,
+                        help="The path where the 'Dockerfile' is located.")
+    parser.add_argument('-d', '--debug', action="store_true",
+                        default=False, help='Show debug information')
+    return parser.parse_args()
+
+
 def main():
     """The program starts here."""
 
-    logging.basicConfig(level=logging.ERROR,
+    args = parse_args()
+
+    if args.debug:
+        debug_level = logging.INFO
+    else:
+        debug_level = logging.ERROR
+
+    logging.basicConfig(level=debug_level,
                         format='%(asctime)s %(message)s')
 
     # garbage collector
@@ -342,8 +363,12 @@ def main():
     default_facts = os.path.join(script_dir, 'default-facts.sh')
 
     # Default parameters
-    dockerfile_dir = '.'
-    j2_template_path = 'dockerfile-patch.j2'
+    if args.path:
+        dockerfile_dir = args.path
+    else:
+        dockerfile_dir = '.'
+
+    j2_template_path = os.path.join(dockerfile_dir, 'dockerfile-patch.j2')
 
     # launch the pbuild script
     dockerfile_patch(dockerfile_dir=dockerfile_dir,
@@ -357,5 +382,5 @@ if __name__ == '__main__':
     main()
 
 
-# quicktest: python3 % -t test:test
+# quicktest: python3 % test
 # vim:ai:et:sw=4:ts=4:sts=4:tw=78:fenc=utf-8
