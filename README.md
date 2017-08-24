@@ -56,7 +56,7 @@ EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
 ```
 
-And we patch it:
+And we run dockerfile-patch:
 ```
 $ dockerfile-patch
 FROM ubuntu:latest
