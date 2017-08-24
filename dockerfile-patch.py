@@ -301,17 +301,6 @@ class DockerFact(object):
         return facts
 
 
-def garbage_collector(signum, frame):
-    """Garbage collection."""
-    gc.collect()
-    logging.debug("%s: Garbage collection done.", sys.argv[0])
-    if signum == signal.SIGINT:
-        sys.stderr.write("Interrupted.\n".format())
-        sys.exit(1)
-    else:
-        sys.exit(0)
-
-
 def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
     """The command line interface."""
     dockerfile = DockerfilePatcher()
@@ -396,6 +385,16 @@ def main():
         pass
 
     # garbage collector
+    def garbage_collector(signum, frame):
+        """Garbage collection."""
+        gc.collect()
+        logging.debug("%s: Garbage collection done.", sys.argv[0])
+        if signum == signal.SIGINT:
+            sys.stderr.write("Interrupted.\n".format())
+            sys.exit(1)
+        else:
+            sys.exit(0)
+
     signal.signal(signal.SIGINT, garbage_collector)
     signal.signal(signal.SIGTERM, garbage_collector)
 
