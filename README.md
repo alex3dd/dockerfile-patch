@@ -35,7 +35,19 @@ CMD ["/usr/sbin/sshd", "-D"]
 
 And run 'dockerfile-patch' with the same parameters as 'docker build':
 ```
-dockerfile-patch -t test:latest
+$ dockerfile-patch
+FROM ubuntu:latest
+
+######## dockerfile-patch patch for ubuntu:latest ########
+
+RUN touch /i-patched-this-container
+
+######## dockerfile-patch patch for ubuntu:latest ########
+RUN useradd -m -d /home/test -s /bin/sh test && \
+    echo "test:test" | chpasswd
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D"]
+
 ```
 
 The command dockerfile-patch below will render the Jinja patch 'dockerfile-patch.j2'
