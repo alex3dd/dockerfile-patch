@@ -371,8 +371,6 @@ def parse_args():
                         help="The path where the 'Dockerfile' is located.")
     parser.add_argument('-o', '--output', default=None,
                         help='Save the patched Dockerfile to a file')
-    parser.add_argument('-c', '--color', action="store_true",
-                        default=False, help='Colorize the output')
     parser.add_argument('-d', '--debug', action="store_true",
                         default=False, help='Show debug information')
     return parser.parse_args()
@@ -434,7 +432,7 @@ def main():
         logging.info('[MAIN] The patched version of the Dockerfile:')
         logging.info('=============================================')
 
-        if color_enabled and args.color:
+        if color_enabled:
             print(highlight(output, DockerLexer(), TerminalFormatter()))
         else:
             print(output)
