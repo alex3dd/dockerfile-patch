@@ -8,15 +8,16 @@ Patch a Dockerfile and build it!
 
 ## Why dockerfile-patch?
 
-'dockerfile-patch' will allow you to dynamically detect the Linux distribution
-of a Dockerfile (thanks to the system fact 'osfamily') and use it to customize
-your Jinja2 template.
+dockerfile-patch will allow you to patch dynamically a Dockerfile using Jinja2
+template and a simple system facts (to gather the OS family, kernel release,
+etc. from a Dockerfile).
 
 These are the steps followed by 'dockerfile-patch' to dynamically patch your
 Dockerfiles:
 - It will load the original (non patched) Dockerfile
-- It will detect the Docker image name (using the command 'FROM')
-- It will run the docker image and gather some system facts (thanks to the script: 'default-facts.sh'. You can also )
+- It will detect the Docker image used by the Dockerfile (read from 'FROM')
+- It will run the docker image imported with FROM and gather some system facts (with the script: 'default-facts.sh')
+- It will create a patched version of the Dockerfile (a patched Dockerfile means: Jinja2 template is rendered and inserted between the FROM and the rest of the Dockerfile)
 
 ## Dependencies
 Read 'requirements.txt'.
