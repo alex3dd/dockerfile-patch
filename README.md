@@ -1,6 +1,6 @@
 # dockerfile-patch
 
-Patch a Dockerfile and build it!
+Patch a Dockerfile with a Jinja2 template and build it with your continuous integration tool Edit
 
 - Author: Asher256
 - Email: asher256@gmail.com
