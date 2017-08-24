@@ -6,19 +6,34 @@ Patch a Dockerfile and build it!
 - Email: asher256@gmail.com
 - Github repo: https://github.com/Asher256/dockerfile-patch
 
+## Why dockerfile-patch?
+
+'dockerfile-patch' will allow you to dynamically detect the Linux distribution
+of a Dockerfile (thanks to the system fact 'osfamily') and use it to customize
+your Jinja2 template.
+
+These are the steps followed by 'dockerfile-patch' to dynamically patch your
+Dockerfiles:
+- It will load the original (non patched) Dockerfile
+- It will detect the Docker image name (using the command 'FROM')
+- It will run the docker image and gather some system facts (thanks to the script: 'default-facts.sh'. You can also )
+
 ## Dependencies
 Read 'requirements.txt'.
 
 ## Example
 
-The './dockerfile-patch.j2' file:
+To be able to use dockerfile-patch, you need to add 'dockerfile-patch.j2' in
+the same directory as your Dockerfile.
+
+File: dockerfile-patch.j2
 ```
 {% if osfamily == 'Debian' %}
 RUN touch /i-patched-this-container
 {% endif %}
 ```
 
-The './Dockerfile' file:
+File: Dockerfile
 ```
 FROM ubuntu:latest
 

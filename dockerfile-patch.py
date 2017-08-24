@@ -34,6 +34,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from subprocess import Popen, CalledProcessError
 import yaml
+import docker
 from dockerfile_parse import DockerfileParser
 from jinja2 import Template
 
@@ -42,7 +43,7 @@ assert platform.system() == 'Linux', 'The operating system needs to be Linux'
 assert sys.version_info >= (3, 3), "The Python version needs to be >= 3.3"
 
 
-class Docker(object):
+class OldDocker(object):
     """Wrapper around 'docker' command."""
 
     def __init__(self, timeout=None):
@@ -190,7 +191,7 @@ class DockerFact(object):
         'image'.
 
         """
-        docker = Docker()
+        # TODO: simplify this function (separate it into parts)
         stdout = ''
         tmp_prefix = 'dockerfile-patch-'
 
@@ -246,11 +247,20 @@ class DockerFact(object):
             os.chmod(main_script_path, 0o755)
             guest_main_script = os.path.join(guest_dir, main_script_name)
 
-            volume = os.path.abspath(tmpfiles['host_mpoint']) + ':' + guest_dir
-            command = ['run', '-v', volume, image, '/bin/sh',
-                       guest_main_script]
+            # volume = os.path.abspath(tmpfiles['host_mpoint']) + ':' +
+            # guest_dir
+            # command = ['run', '-v', volume, image, '/bin/sh',
+            #            guest_main_script]
 
-            docker(command)
+            docker_client = docker.client.from_env()
+
+            volumes = {os.path.abspath(tmpfiles['host_mpoint']): guest_dir}
+            docker_client.containers.run(image=image,
+                                         command=['/bin/sh',
+                                                  guest_main_script],
+                                         remove=True,
+                                         stdout=True,
+                                         volumes=volumes)
 
             facts_yaml = os.path.join(tmpfiles['host_mpoint'],
                                       'facts.yaml')
@@ -357,6 +367,8 @@ def parse_args():
                         help="The path where the 'Dockerfile' is located.")
     parser.add_argument('-o', '--output', default=None,
                         help='Save the patched Dockerfile to a file')
+    parser.add_argument('-c', '--color', action="store_true",
+                        default=False, help='Colorize the output')
     parser.add_argument('-d', '--debug', action="store_true",
                         default=False, help='Show debug information')
     return parser.parse_args()
@@ -383,9 +395,9 @@ def main():
         from pygments.lexers import DockerLexer
         from pygments.formatters import TerminalFormatter
 
-        color = True if sys.stdout.isatty() else False
+        color_enabled = True if sys.stdout.isatty() else False
     except ModuleNotFoundError:
-        color = False
+        color_enabled = False
 
     # default facts gatherer
     script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -411,7 +423,7 @@ def main():
         logging.info('[MAIN] The patched version of the Dockerfile:')
         logging.info('=============================================')
 
-        if color:
+        if color_enabled and args.color:
             print(highlight(output, DockerLexer(), TerminalFormatter()))
         else:
             print(output)
