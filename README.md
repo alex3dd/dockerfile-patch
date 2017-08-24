@@ -25,6 +25,14 @@ Dockerfiles:
 - It will run the detected docker image and gather system facts (with the script: 'default-facts.sh')
 - It will create a patched version of the Dockerfile (a patched Dockerfile means: Jinja2 template is rendered and inserted between the FROM and the rest of the Dockerfile)
 
+### Why should I use it?
+
+This script will help you to patch/template existing Dockerfiles in order
+to add custom parameters:
+- Insert your self signed certificate to existing Dockerfiles automatically
+- Configure a proxy for apt-get / yum to download the packages faster during the build
+- Insert files that are specific to your infrastructure
+
 ## Dependencies
 - Read 'requirements.txt' for required dependencies.
 - Read 'requirements_optional.txt' for optional dependencies.
@@ -86,11 +94,5 @@ $ docker build -f Dockerfile.patched -t test:latest  .
 (You can add the option --debug to the command dockerfile-patch)
 
 The command dockerfile-patch below will render the Jinja patch 'dockerfile-patch.j2'
-and insert it after 'FROM' and build the docker container.
-
-This script will help you to patch/template the existing Dockerfiles in order
-to add some custom parameters:
-- Insert your self signed certificate
-- Insert your proxy to download the packages faster during/after the build
-- Insert files that are specific to your infrastructure
+and insert it after 'FROM' in the patched Dockerfile.
 
