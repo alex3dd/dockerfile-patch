@@ -9,10 +9,14 @@ Patch a Dockerfile with a Jinja2 template and build it!
 ## What is dockerfile-patch?
 
 dockerfile-patch will allow you to dynamically patch a Dockerfile with Jinja2
-templates, customized with a Docker image system facts gatherer (supported
-facts: osfamily, operatingsystem, kernelrelease and architecture). You can use
-the system facts to customize the Jinja2 patches that will be applied to your
-Dockerfiles.
+templates.
+
+Your Jinja2 templates can be customized using a system facts gatherer that can
+gather information from Docker images (supported facts: osfamily,
+operatingsystem, kernelrelease and architecture). You can use the system facts
+to customize the Jinja2 patches you want to apply to your Dockerfiles.
+
+### How does it work?
 
 These are the steps followed by 'dockerfile-patch' to dynamically patch your
 Dockerfiles:
@@ -22,7 +26,8 @@ Dockerfiles:
 - It will create a patched version of the Dockerfile (a patched Dockerfile means: Jinja2 template is rendered and inserted between the FROM and the rest of the Dockerfile)
 
 ## Dependencies
-Read 'requirements.txt'.
+- Read 'requirements.txt' for required dependencies.
+- Read 'requirements_optional.txt' for optional dependencies.
 
 ## Example
 
