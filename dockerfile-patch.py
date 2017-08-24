@@ -117,14 +117,22 @@ class DockerfilePatcher(object):
                      str(list(image_names)))
         return result
 
-    def set_patch(self, image, content):
-        """Patch an image with a Dockerfile content."""
+    def set_patch(self, image, content, patch_name=None):
+        """Patch an image with a Dockerfile content.
+
+        The most important args are image (the Docker image like
+        'ubuntu:latest') and content. 'patch_name' is just a
+        string that will be added to the comment before and after
+        the patch.
+
+        """
         if image in self.patches:
             raise KeyError("The image '{}' exists already.".format(image))
 
         logging.info("[DOCKERFILE PATCHER] Patch for '%s' created:\n%s",
                      image, content)
-        self.patches[image.strip()] = content
+        self.patches[image.strip()] = {'content': content,
+                                       'name': patch_name}
 
     def to_str(self, patch=True):
         """Return a patched version of the Dockerfile."""
@@ -144,10 +152,20 @@ class DockerfilePatcher(object):
             if item['instruction'] == 'FROM':
                 baseimage = item['value']
                 if baseimage in self.patches:
-                    patch_comment = '######## dockerfile-patch patch for ' + \
-                        item['value'] + ' ########\n'
-                    result += '\n' + patch_comment + \
-                        self.patches[baseimage] + '\n' + patch_comment
+                    patch = self.patches[baseimage]
+
+                    patch_comment = "#" + ('-' * 8) + " '" + item['value'] + \
+                        "' dockerfile-patch:" + ' '
+                    if patch['name']:
+                        patch_comment += patch['name']
+
+                    patch_comment += ('-' * 8)
+
+                    result += '\n'
+                    result += patch_comment
+                    result += '\n' + patch['content'] + '\n'
+                    result += patch_comment
+                    result += '\n' * 2
 
         return result
 
@@ -322,10 +340,11 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
 
         # Creating the patch for this image
         template = Template(jinja_patch)
-        dockerfile.set_patch(image_name, template.render(**facts[image_name]))
+        dockerfile.set_patch(image_name, template.render(**facts[image_name]),
+                             patch_name=j2_template_path)
 
     # Final result
-    print(dockerfile.to_str())
+    return dockerfile.to_str()
 
 
 def parse_args():
@@ -336,6 +355,8 @@ def parse_args():
                                      usage=usage)
     parser.add_argument('path', type=str,
                         help="The path where the 'Dockerfile' is located.")
+    parser.add_argument('-o', '--output', default=None,
+                        help='Save the patched Dockerfile to a file')
     parser.add_argument('-d', '--debug', action="store_true",
                         default=False, help='Show debug information')
     return parser.parse_args()
@@ -343,7 +364,6 @@ def parse_args():
 
 def main():
     """The program starts here."""
-
     args = parse_args()
 
     if args.debug:
@@ -358,6 +378,15 @@ def main():
     signal.signal(signal.SIGINT, garbage_collector)
     signal.signal(signal.SIGTERM, garbage_collector)
 
+    try:
+        from pygments import highlight
+        from pygments.lexers import DockerLexer
+        from pygments.formatters import TerminalFormatter
+
+        color = True if sys.stdout.isatty() else False
+    except ModuleNotFoundError:
+        color = False
+
     # default facts gatherer
     script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
     default_facts = os.path.join(script_dir, 'default-facts.sh')
@@ -371,9 +400,21 @@ def main():
     j2_template_path = os.path.join(dockerfile_dir, 'dockerfile-patch.j2')
 
     # launch the pbuild script
-    dockerfile_patch(dockerfile_dir=dockerfile_dir,
-                     j2_template_path=j2_template_path,
-                     fact_scripts_paths=[default_facts])
+    output = dockerfile_patch(dockerfile_dir=dockerfile_dir,
+                              j2_template_path=j2_template_path,
+                              fact_scripts_paths=[default_facts])
+
+    if args.output:
+        with open(args.output, 'w') as fhandler:
+            fhandler.write(output)
+    else:
+        logging.info('[MAIN] The patched version of the Dockerfile:')
+        logging.info('=============================================')
+
+        if color:
+            print(highlight(output, DockerLexer(), TerminalFormatter()))
+        else:
+            print(output)
 
     sys.exit(0)
 
