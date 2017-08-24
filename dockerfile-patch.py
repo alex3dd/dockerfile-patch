@@ -377,13 +377,6 @@ def main():
     logging.basicConfig(level=debug_level,
                         format='%(asctime)s %(message)s')
 
-    # optional module for colored logs
-    try:
-        import coloredlogs
-        coloredlogs.install()
-    except ModuleNotFoundError:
-        pass
-
     # garbage collector
     def garbage_collector(signum, frame):
         """Garbage collection."""
