@@ -34,14 +34,14 @@ Dockerfiles:
 To be able to use dockerfile-patch, you need to add 'dockerfile-patch.j2' to
 the same directory as the 'Dockerfile'.
 
-File: dockerfile-patch.j2
+dockerfile-patch.j2
 ```
 {% if osfamily == 'Debian' %}
 RUN touch /i-patched-this-container
 {% endif %}
 ```
 
-File: Dockerfile
+Dockerfile
 ```
 FROM ubuntu:latest
 
@@ -56,7 +56,7 @@ EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
 ```
 
-And run 'dockerfile-patch' with the same parameters as 'docker build':
+Run 'dockerfile-patch' with the same parameters as 'docker build':
 ```
 $ dockerfile-patch
 FROM ubuntu:latest
