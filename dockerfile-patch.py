@@ -254,6 +254,10 @@ class DockerFact(object):
 
             docker_client = docker.client.from_env()
 
+            # Pull the image
+            logging.info("[FACTS] docker pull '%s'", image)
+            docker_client.images.pull(image)
+
             volumes = {os.path.abspath(tmpfiles['host_mpoint']): guest_dir}
             docker_client.containers.run(image=image,
                                          command=['/bin/sh',
@@ -385,6 +389,13 @@ def main():
 
     logging.basicConfig(level=debug_level,
                         format='%(asctime)s %(message)s')
+
+    # optional module for colored logs
+    try:
+        import coloredlogs
+        coloredlogs.install()
+    except ModuleNotFoundError:
+        pass
 
     # garbage collector
     signal.signal(signal.SIGINT, garbage_collector)

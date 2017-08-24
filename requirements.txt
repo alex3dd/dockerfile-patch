@@ -1,5 +1,4 @@
 dockerfile-parse>=0.0.7
 PyYAML
 Jinja2
-Pygments
 docker
