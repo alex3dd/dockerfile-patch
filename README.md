@@ -50,6 +50,16 @@ CMD ["/usr/sbin/sshd", "-D"]
 
 ```
 
+You can save the patched version below with the '-o' option:
+```
+dockerfile-patch -o Dockerfile.patched
+```
+
+And build the patched version of your container:
+```
+$ docker build -f Dockerfile.patched -t test:latest  .
+```
+
 (You can add the option --debug to the command dockerfile-patch)
 
 The command dockerfile-patch below will render the Jinja patch 'dockerfile-patch.j2'
