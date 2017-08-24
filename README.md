@@ -32,7 +32,7 @@ Dockerfiles:
 ## Example
 
 To be able to use dockerfile-patch, you need to add 'dockerfile-patch.j2' to
-the same directory as your Dockerfile.
+the same directory as the 'Dockerfile'.
 
 File: dockerfile-patch.j2
 ```
