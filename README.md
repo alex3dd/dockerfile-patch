@@ -6,7 +6,7 @@ Patch a Dockerfile with a Jinja2 template and build it!
 - Email: asher256@gmail.com
 - Github repo: https://github.com/Asher256/dockerfile-patch
 
-## Why dockerfile-patch?
+## What is dockerfile-patch?
 
 dockerfile-patch will allow you to patch dynamically a Dockerfile using Jinja2
 templates and a simple system facts gatherer (supported facts: osfamily,
