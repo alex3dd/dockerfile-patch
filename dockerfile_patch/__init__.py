@@ -364,10 +364,8 @@ def dockerfile_patch(dockerfile_dir, jinja2_patches_paths, fact_scripts_paths):
         if facts[image_name]['docker_image_user'] != 'root':
             # change the user to root before the patch and go back to the
             # Docker image's user after the patch
-            patch += '# dockerfile-patch: change the user to root\n' + \
-                'USER root\n\n' + \
-                "# The patch running as root:\n" + \
-                patch + \
+            patch = '# dockerfile-patch: change the user to root\n' + \
+                'USER root\n' + patch + '\n' + \
                 '# dockerfile-patch: go back to the original user\n' + \
                 'USER ' + facts[image_name]['docker_image_user'] + '\n'
 
@@ -455,14 +453,21 @@ def main():
                               fact_scripts_paths=[default_facts])
 
     if args.output:
+        sys.stderr.write('[SUCCESS] Patched Dockerfile: {}\n'
+                         .format(args.output))
         with open(args.output, 'w') as fhandler:
             fhandler.write(output)
+
+        sys.stderr.write('\n[TIP] You can build it with: docker build -f '
+                         + args.output + ' -t image:release ' +
+                         dockerfile_dir + '\n')
     else:
         sys.stderr.write('[SUCCESS] Patched Dockerfile:\n')
-        sys.stderr.flush()
 
         sys.stdout.write(output)
-        sys.stdout.flush()
+
+    sys.stderr.flush()
+    sys.stdout.flush()
 
     sys.exit(0)
 
