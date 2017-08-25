@@ -4,7 +4,7 @@
 #
 # Author: Asher256 <asher256@gmail.com>
 # Github repo: https://github.com/Asher256/dockerfile-patch/
-# License: GPL
+# License: LGPL 2.1
 #
 # This source code follows the Google style guide for shell scripts:
 # https://google.github.io/styleguide/shell.xml

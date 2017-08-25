@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # Author: Asher256 <asher256@gmail.com>
-# License: GPL
+# License: LGPL 2.1
 #
 # Github repo: https://github.com/Asher256/dockerfile-patch/
 #
