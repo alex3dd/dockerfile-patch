@@ -20,6 +20,7 @@ import tempfile
 import shutil
 import argparse
 import signal
+import gc
 from collections import OrderedDict
 from copy import deepcopy
 import yaml
@@ -403,8 +404,8 @@ def main():
 
     # launch the pbuild script
     output = dockerfile_patch(dockerfile_dir=dockerfile_dir,
-                      j2_template_path=j2_template_path,
-                      fact_scripts_paths=[default_facts])
+                              j2_template_path=j2_template_path,
+                              fact_scripts_paths=[default_facts])
 
     if args.output:
         with open(args.output, 'w') as fhandler:
