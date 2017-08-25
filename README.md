@@ -70,7 +70,7 @@ $ dockerfile-patch --debug
 
 To save the patched Dockerfile, use '-o' option:
 ```
-dockerfile-patch -o Dockerfile.patched
+$ dockerfile-patch -o Dockerfile.patched
 ```
 
 Once exported, you can build your Docker container using the patched Dockerfile:
@@ -82,17 +82,21 @@ $ docker build -f Dockerfile.patched -t test:latest  .
 
 These are the steps followed by 'dockerfile-patch' to dynamically patch your
 Dockerfiles:
-- It will load the original (not patched) Dockerfile
-- It will detect the Docker image used by the Dockerfile (from the Dockerfile instruction 'FROM')
-- It will run the detected docker image and gather system facts (with the script: 'default-facts.sh')
-- It will create a patched version of the Dockerfile (a patched Dockerfile means: Jinja2 template is rendered and inserted between the FROM and the rest of the Dockerfile)
+- Load the original Dockerfile
+- Detect the Docker image in the Dockerfile (using 'FROM' instruction)
+- Run the detected docker image and gather system facts (with the script: 'default-facts.sh')
+- Create a patched version of the Dockerfile (a patched Dockerfile means: a Jinja2 template is rendered and inserted between 'FROM image:release' and the rest of the Dockerfile)
 
 ### Why should I use it dockerfile-patch?
 
-This script will help you to patch/template existing Dockerfiles in order
-to add custom parameters:
-- Insert your self signed certificate to existing Dockerfiles automatically
-- Configure a proxy for apt-get / yum to download the packages faster during the build
+dockerfile-patch will help you to patch existing Dockerfiles in order to add
+custom parameters specific to your needs:
+- Inject your self-signed certificate into an existing Dockerfile. Why? Because
+  you don't want to add a self-signed configuration to all Dockerfiles you
+  create. Your Dockerfiles will remain clean and the patching process will be
+  done automatically thanks to dockerfile-patch and your continuous integration
+  tool.
+- Dynamically add a proxy parameter to apt-get to speed up the download
 - Insert files that are specific to your infrastructure
 
 ### Features of dockerfile-path
