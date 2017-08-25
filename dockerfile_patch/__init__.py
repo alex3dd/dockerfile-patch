@@ -141,6 +141,8 @@ class DockerFact(object):
 
     def __init__(self):
         """Build a Yaml."""
+        # these files will be deleted
+        self.tmpfiles = []
         # List of script paths and content: {'path': 'content'}
         self.fact_scripts_paths = OrderedDict()
         # init docker clients
@@ -153,115 +155,102 @@ class DockerFact(object):
         with open(path, 'r') as fhandler:
             self.fact_scripts_paths[os.path.abspath(path)] = fhandler.read()
 
-    def gather_facts(self, image):
+    def gather_facts(self, image, tmp_dir='.'):
         """Run the facter script in an image name.
 
         Return: the stdout of the facter script started inside the container
         'image'.
+
+        tmp_prefix: the directory where the temporary file will be created
+        (default = '.').
 
         """
         # TODO: simplify this function (separate it into parts)
         stdout = ''
         tmp_prefix = 'dockerfile-patch-'
 
+        # create a temporary directory that will contain the facter script
+        host_mpoint = tempfile.mkdtemp(suffix='.tmp',
+                                       prefix=tmp_prefix,
+                                       dir=tmp_dir)
+        self.tmpfiles.append(host_mpoint)
+        self.logging.debug('[FACTS] Temporary dir created: %s%s',
+                           host_mpoint, os.sep)
+
+        # Guest mount point (volume that points to the local host_mpoint)
+        guest_dir = os.path.join('/',
+                                 os.path.basename(host_mpoint))
+        self.logging.debug('[FACTS] Volume in the running '
+                           'Docker container:'
+                           ' %s%s', guest_dir, os.sep)
+
+        # Write all scripts to the directory
+        index = 0
+        guest_scripts = []
+        for scr_path, scr_content in self.fact_scripts_paths.items():
+            index += 1
+            facter_script_name = str(index).zfill(6) + "-" + \
+                os.path.basename(scr_path) + '-fact'
+            facter_script_path = os.path.join(host_mpoint,
+                                              facter_script_name)
+
+            with open(facter_script_path, 'w') as fhandler:
+                self.logging.debug('[FACTS] Fact script '
+                                   'written to %s:\n%s',
+                                   facter_script_path,
+                                   scr_content)
+                fhandler.write(scr_content)
+            os.chmod(facter_script_path, 0o755)
+
+            guest_scripts.append(os.path.join(guest_dir,
+                                              facter_script_name))
+
+        # create the main script (this script will run all others)p
+        main_script_name = 'main_facter.sh'
+        main_script_path = os.path.join(host_mpoint,
+                                        main_script_name)
+        main_script_content = "#!/bin/sh\n"
+        main_script_content += 'cd "' + guest_dir + '" || exit 1\n'
+        for item in guest_scripts:
+            main_script_content += item + " || exit 1\n"
+        with open(main_script_path, 'w') as fhandler:
+            self.logging.debug('[FACTS] Main facter '
+                               'script written to %s:\n%s',
+                               main_script_path,
+                               main_script_content)
+            fhandler.write(main_script_content)
+        os.chmod(main_script_path, 0o755)
+        guest_main_script = os.path.join(guest_dir, main_script_name)
+
+        # Pull the image
+        # self.logging.debug("[FACTS] docker pull '%s'", image)
+        sys.stderr.write('[RUN] docker pull {}\n'.format(image))
+        sys.stderr.flush()
+        self.docker_client.images.pull(image)
+
+        # of 'USER xx' is used, we will switch to root/
+        self.logging.debug("[FACTS] docker inspect '%s'", image)
+        inspect_image = self.docker_client.api.inspect_image(image)
+        image_user = inspect_image['Config']['User'].strip()
+
+        volumes = {os.path.abspath(host_mpoint): guest_dir}
+        self.docker_client.containers.run(image=image,
+                                          command=['/bin/sh',
+                                                   guest_main_script],
+                                          user='root',
+                                          remove=True,
+                                          stdout=True,
+                                          volumes=volumes)
+
+        facts_yaml = os.path.join(host_mpoint,
+                                  'facts.yaml')
         try:
-            tmpfiles = {}    # the files in this dict will be deleted
-
-            # create a temporary directory that will contain the facter script
-            tmpfiles['host_mpoint'] = tempfile.mkdtemp(suffix='.tmp',
-                                                       prefix=tmp_prefix,
-                                                       dir='.')
-            self.logging.debug('[FACTS] Temporary dir created: %s%s',
-                               tmpfiles['host_mpoint'], os.sep)
-
-            # Guest mount point (volume that points to the local host_mpoint)
-            guest_dir = os.path.join('/',
-                                     os.path.basename(tmpfiles['host_mpoint']))
-            self.logging.debug('[FACTS] Volume in the running '
-                               'Docker container:'
-                               ' %s%s', guest_dir, os.sep)
-
-            # Write all scripts to the directory
-            index = 0
-            guest_scripts = []
-            for scr_path, scr_content in self.fact_scripts_paths.items():
-                index += 1
-                facter_script_name = str(index).zfill(6) + "-" + \
-                    os.path.basename(scr_path) + '-fact'
-                facter_script_path = os.path.join(tmpfiles['host_mpoint'],
-                                                  facter_script_name)
-
-                with open(facter_script_path, 'w') as fhandler:
-                    self.logging.debug('[FACTS] Fact script '
-                                       'written to %s:\n%s',
-                                       facter_script_path,
-                                       scr_content)
-                    fhandler.write(scr_content)
-                os.chmod(facter_script_path, 0o755)
-
-                guest_scripts.append(os.path.join(guest_dir,
-                                                  facter_script_name))
-
-            # create the main script (this script will run all others)p
-            main_script_name = 'main_facter.sh'
-            main_script_path = os.path.join(tmpfiles['host_mpoint'],
-                                            main_script_name)
-            main_script_content = "#!/bin/sh\n"
-            main_script_content += 'cd "' + guest_dir + '" || exit 1\n'
-            for item in guest_scripts:
-                main_script_content += item + " || exit 1\n"
-            with open(main_script_path, 'w') as fhandler:
-                self.logging.debug('[FACTS] Main facter '
-                                   'script written to %s:\n%s',
-                                   main_script_path,
-                                   main_script_content)
-                fhandler.write(main_script_content)
-            os.chmod(main_script_path, 0o755)
-            guest_main_script = os.path.join(guest_dir, main_script_name)
-
-            # Pull the image
-            # self.logging.debug("[FACTS] docker pull '%s'", image)
-            sys.stderr.write('[RUN] docker pull {}\n'.format(image))
-            sys.stderr.flush()
-            self.docker_client.images.pull(image)
-
-            # of 'USER xx' is used, we will switch to root/
-            self.logging.debug("[FACTS] docker inspect '%s'", image)
-            inspect_image = self.docker_client.api.inspect_image(image)
-            image_user = inspect_image['Config']['User'].strip()
-
-            volumes = {os.path.abspath(tmpfiles['host_mpoint']): guest_dir}
-            self.docker_client.containers.run(image=image,
-                                              command=['/bin/sh',
-                                                       guest_main_script],
-                                              user='root',
-                                              remove=True,
-                                              stdout=True,
-                                              volumes=volumes)
-
-            facts_yaml = os.path.join(tmpfiles['host_mpoint'],
-                                      'facts.yaml')
-            try:
-                with open(facts_yaml, 'r') as fhandler:
-                    stdout = fhandler.read()
-            except IOError:
-                self.logging.debug("[WARNING] The fact scripts "
-                                   "didn't write any fact in '%s'.",
-                                   facts_yaml)
-
-        finally:
-            for _, path in tmpfiles.items():
-                if os.path.isdir(path):
-                    self.logging.debug('[FACTS DELETE] Temporary '
-                                       'dir deleted: %s%s', path, os.sep)
-                    shutil.rmtree(path)
-                elif os.path.exists(path):
-                    self.logging.debug('[FACTS DELETE] Temporary '
-                                       'file deleted: %s', path)
-                    os.unlink(path)
-                else:
-                    self.logging.debug("[FACTS WARNING] Temporary file wasn't "
-                                       "found: %s", path)
+            with open(facts_yaml, 'r') as fhandler:
+                stdout = fhandler.read()
+        except IOError:
+            self.logging.debug("[WARNING] The fact scripts "
+                               "didn't write any fact in '%s'.",
+                               facts_yaml)
 
         facts = yaml.load(stdout)
 
@@ -277,7 +266,32 @@ class DockerFact(object):
 
         self.logging.debug('[FACTS] System facts gathered: %s', str(facts))
 
+        # delete temporary files
+        self._rm_tmpfiles()
+
         return facts
+
+    def __del__(self):
+        """Clean-up."""
+        self._rm_tmpfiles()
+
+    def _rm_tmpfiles(self):
+        """Delete temporary files."""
+        for path in self.tmpfiles:
+            if os.path.isdir(path):
+                self.logging.debug('[FACTS DELETE] Temporary '
+                                   'dir deleted: %s%s', path, os.sep)
+                shutil.rmtree(path)
+            elif os.path.exists(path):
+                self.logging.debug('[FACTS DELETE] Temporary '
+                                   'file deleted: %s', path)
+                os.unlink(path)
+            else:
+                self.logging.debug("[FACTS WARNING] Temporary file wasn't "
+                                   "found: %s", path)
+
+        # it is empty now
+        self.tmpfiles = []
 
 
 def dockerfile_patch(dockerfile_dir, jinja2_patches_paths, fact_scripts_paths):
@@ -333,7 +347,8 @@ def dockerfile_patch(dockerfile_dir, jinja2_patches_paths, fact_scripts_paths):
             continue
 
         logger.debug("[MAIN] Gathering facts from the image '%s'", image_name)
-        facts[image_name] = docker_facter.gather_facts(image_name)
+        facts[image_name] = docker_facter.gather_facts(image_name,
+                                                       tmp_dir=dockerfile_dir)
 
         # Creating the patch for this image
         patch = ''
@@ -456,5 +471,6 @@ if __name__ == '__main__':
     main()
 
 # quicktest: python3 % -p ../test/dockerfile-patch.j2
-# quicktest: -p ../test/dockerfile-patch.j2 -p ../test/dockerfile-patch.j2 ../test
+# quicktest: -p ../test/dockerfile-patch.j2
+# quicktest: -p ../test/dockerfile-patch.j2 ../test
 # vim:ai:et:sw=4:ts=4:sts=4:tw=78:fenc=utf-8
