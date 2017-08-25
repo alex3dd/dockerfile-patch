@@ -38,14 +38,16 @@ class DockerfilePatcher(object):
         # empty DockerfileParser
         self.structure = []
         self.patches = {}
+        self.logging = logging.getLogger(__name__ + '.' +
+                                         self.__class__.__name__)
 
     def load(self, path):
         """Load a Dockerfile."""
         dfp = DockerfileParser(path=path)
         self.structure = deepcopy(dfp.structure)
-        logging.info("[DOCKERFILE PATCHER] '%s' loaded:\n%s",
-                     os.path.join(path, 'Dockerfile'),
-                     dfp.content)
+        self.logging.debug("[DOCKERFILE PATCHER] '%s' loaded:\n%s",
+                           os.path.join(path, 'Dockerfile'),
+                           dfp.content)
 
     def save(self, path, patch=True):
         """Save a patched version of the Dockerfile."""
@@ -67,8 +69,8 @@ class DockerfilePatcher(object):
             result.append(item)
             image_names.add(item['value'])
 
-        logging.info("[DOCKERFILE PATCHER] Base images detected in "
-                     "the Dockerfile: %s", str(list(image_names)))
+        self.logging.debug("[DOCKERFILE PATCHER] Base images detected in "
+                           "the Dockerfile: %s", str(list(image_names)))
         return result
 
     def set_patch(self, image, content, patch_name=None):
@@ -83,8 +85,8 @@ class DockerfilePatcher(object):
         if image in self.patches:
             raise KeyError("The image '{}' exists already.".format(image))
 
-        logging.info("[DOCKERFILE PATCHER] Patch for '%s' created:\n%s",
-                     image, content)
+        self.logging.debug("[DOCKERFILE PATCHER] Patch for '%s' created:\n%s",
+                           image, content)
         self.patches[image.strip()] = {'content': content,
                                        'name': patch_name}
 
@@ -131,6 +133,10 @@ class DockerFact(object):
         """Build a Yaml."""
         # List of script paths and content: {'path': 'content'}
         self.fact_scripts_paths = OrderedDict()
+        # init docker clients
+        self.docker_client = docker.client.from_env()
+        self.logging = logging.getLogger(__name__ + '.' +
+                                         self.__class__.__name__)
 
     def add_fact_script(self, path):
         """Docstring."""
@@ -155,14 +161,15 @@ class DockerFact(object):
             tmpfiles['host_mpoint'] = tempfile.mkdtemp(suffix='.tmp',
                                                        prefix=tmp_prefix,
                                                        dir='.')
-            logging.info('[FACTS] Temporary dir created: %s%s',
-                         tmpfiles['host_mpoint'], os.sep)
+            self.logging.debug('[FACTS] Temporary dir created: %s%s',
+                               tmpfiles['host_mpoint'], os.sep)
 
             # Guest mount point (volume that points to the local host_mpoint)
             guest_dir = os.path.join('/',
                                      os.path.basename(tmpfiles['host_mpoint']))
-            logging.info('[FACTS] Volume in the running Docker container:'
-                         ' %s%s', guest_dir, os.sep)
+            self.logging.debug('[FACTS] Volume in the running '
+                               'Docker container:'
+                               ' %s%s', guest_dir, os.sep)
 
             # Write all scripts to the directory
             index = 0
@@ -175,9 +182,10 @@ class DockerFact(object):
                                                   facter_script_name)
 
                 with open(facter_script_path, 'w') as fhandler:
-                    logging.info('[FACTS] Fact script written to %s:\n%s',
-                                 facter_script_path,
-                                 scr_content)
+                    self.logging.debug('[FACTS] Fact script '
+                                       'written to %s:\n%s',
+                                       facter_script_path,
+                                       scr_content)
                     fhandler.write(scr_content)
                 os.chmod(facter_script_path, 0o755)
 
@@ -193,31 +201,32 @@ class DockerFact(object):
             for item in guest_scripts:
                 main_script_content += item + " || exit 1\n"
             with open(main_script_path, 'w') as fhandler:
-                logging.info('[FACTS] Main facter script written to %s:\n%s',
-                             main_script_path,
-                             main_script_content)
+                self.logging.debug('[FACTS] Main facter '
+                                   'script written to %s:\n%s',
+                                   main_script_path,
+                                   main_script_content)
                 fhandler.write(main_script_content)
             os.chmod(main_script_path, 0o755)
             guest_main_script = os.path.join(guest_dir, main_script_name)
 
-            # volume = os.path.abspath(tmpfiles['host_mpoint']) + ':' +
-            # guest_dir
-            # command = ['run', '-v', volume, image, '/bin/sh',
-            #            guest_main_script]
-
-            docker_client = docker.client.from_env()
-
             # Pull the image
-            logging.info("[FACTS] docker pull '%s'", image)
-            docker_client.images.pull(image)
+            # self.logging.debug("[FACTS] docker pull '%s'", image)
+            sys.stderr.write('[RUN] docker pull {}\n'.format(image))
+            sys.stderr.flush()
+            self.docker_client.images.pull(image)
+
+            # of 'USER xx' is used, we will switch to root/
+            self.logging.debug("[FACTS] docker inspect '%s'", image)
+            inspect_image = self.docker_client.api.inspect_image(image)
+            image_user = inspect_image['Config']['User'].strip()
 
             volumes = {os.path.abspath(tmpfiles['host_mpoint']): guest_dir}
-            docker_client.containers.run(image=image,
-                                         command=['/bin/sh',
-                                                  guest_main_script],
-                                         remove=True,
-                                         stdout=True,
-                                         volumes=volumes)
+            self.docker_client.containers.run(image=image,
+                                              command=['/bin/sh',
+                                                       guest_main_script],
+                                              remove=True,
+                                              stdout=True,
+                                              volumes=volumes)
 
             facts_yaml = os.path.join(tmpfiles['host_mpoint'],
                                       'facts.yaml')
@@ -225,37 +234,45 @@ class DockerFact(object):
                 with open(facts_yaml, 'r') as fhandler:
                     stdout = fhandler.read()
             except IOError:
-                logging.info("[WARNING] The fact scripts "
-                             "didn't write any fact in '%s'.",
-                             facts_yaml)
+                self.logging.debug("[WARNING] The fact scripts "
+                                   "didn't write any fact in '%s'.",
+                                   facts_yaml)
 
         finally:
             for _, path in tmpfiles.items():
                 if os.path.isdir(path):
-                    logging.info('[FACTS DELETE] Temporary '
-                                 'dir deleted: %s%s', path, os.sep)
+                    self.logging.debug('[FACTS DELETE] Temporary '
+                                       'dir deleted: %s%s', path, os.sep)
                     shutil.rmtree(path)
                 elif os.path.exists(path):
-                    logging.info('[FACTS DELETE] Temporary '
-                                 'file deleted: %s', path)
+                    self.logging.debug('[FACTS DELETE] Temporary '
+                                       'file deleted: %s', path)
                     os.unlink(path)
                 else:
-                    logging.info("[FACTS WARNING] Temporary file wasn't "
-                                 "found: %s", path)
+                    self.logging.debug("[FACTS WARNING] Temporary file wasn't "
+                                       "found: %s", path)
 
         facts = yaml.load(stdout)
 
+        # A fact added by dockerfile_patch
+        if image_user:
+            facts['docker_image_user'] = image_user
+        else:
+            facts['docker_image_user'] = ''
+
         if not facts:
-            logging.info("[FACTS] ERROR: unable to gather facts.")
+            self.logging.debug("[FACTS] ERROR: unable to gather facts.")
             sys.exit(1)
 
-        logging.info('[FACTS] System facts gathered: %s', str(facts))
+        self.logging.debug('[FACTS] System facts gathered: %s', str(facts))
 
         return facts
 
 
 def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
     """The command line interface."""
+    logger = logging.getLogger(__name__)
+
     dockerfile = DockerfilePatcher()
     docker_facter = DockerFact()
 
@@ -275,7 +292,7 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
     try:
         with open(j2_template_path, 'r') as fhandler:
             jinja_patch = fhandler.read()
-            logging.info("[FACTS] Jinja patch '%s' loaded:\n%s\n",
+            logger.debug("[FACTS] Jinja patch '%s' loaded:\n%s\n",
                          j2_template_path, jinja_patch)
     except OSError as err:
         sys.stderr.write("ERROR: unable to load the Jinja2 template "
@@ -291,11 +308,20 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
             # Already gathered
             continue
 
-        logging.info("[MAIN] Gathering facts from the image '%s'", image_name)
+        logger.debug("[MAIN] Gathering facts from the image '%s'", image_name)
         facts[image_name] = docker_facter.gather_facts(image_name)
 
         # Creating the patch for this image
-        template = Template(jinja_patch)
+        patch = jinja_patch
+        # ==== EMBED ========================================================
+        from IPython.terminal.embed import InteractiveShellEmbed
+        ipshell = InteractiveShellEmbed(config=None, banner1='', exit_msg='')
+        ipshell.confirm_exit = False
+        ipshell.mainloop()
+        exit()
+        # ==== EMBED ========================================================
+
+        template = Template(patch)
         dockerfile.set_patch(image_name, template.render(**facts[image_name]),
                              patch_name=j2_template_path)
 
