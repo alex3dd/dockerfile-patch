@@ -23,6 +23,18 @@ The system facts gathered can be used to patch your Dockerfile with a Jinja2
 template. The Jinja2 template can use the facts to render a customized patch
 between 'FROM image:release' and the reste of your Dockerfile.
 
+### Why should I use it dockerfile-patch?
+
+dockerfile-patch will help you to patch existing Dockerfiles in order to add
+custom parameters specific to your needs:
+- **Inject your self-signed certificate into an existing Dockerfile**. Why? Because
+  you don't want to add a self-signed configuration to all Dockerfiles you
+  create. Your Dockerfiles will remain clean and the patching process will be
+  done automatically thanks to dockerfile-patch and your continuous integration
+  tool.
+- Dynamically add a proxy parameter to apt-get to speed up the download
+- Insert files that are specific to your infrastructure
+
 ## Example
 
 To be able to use dockerfile-patch, you need to add 'dockerfile-patch.j2' to
@@ -112,18 +124,6 @@ Dockerfiles:
 - Detect the Docker image in the Dockerfile (using 'FROM' instruction)
 - Run the detected docker image and gather system facts (with the script: 'default-facts.sh')
 - Create a patched version of the Dockerfile (a patched Dockerfile means: a Jinja2 template is rendered and inserted between 'FROM image:release' and the rest of the Dockerfile)
-
-### Why should I use it dockerfile-patch?
-
-dockerfile-patch will help you to patch existing Dockerfiles in order to add
-custom parameters specific to your needs:
-- **Inject your self-signed certificate into an existing Dockerfile**. Why? Because
-  you don't want to add a self-signed configuration to all Dockerfiles you
-  create. Your Dockerfiles will remain clean and the patching process will be
-  done automatically thanks to dockerfile-patch and your continuous integration
-  tool.
-- Dynamically add a proxy parameter to apt-get to speed up the download
-- Insert files that are specific to your infrastructure
 
 ### Features of dockerfile-path
 The features of the current version:
