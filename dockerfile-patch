@@ -7,12 +7,11 @@
 # This source code follows the PEP-8 style guide:
 # https://www.python.org/dev/peps/pep-0008/
 #
-"""Command line interface you can use to patch.
-
-dockerfile-patch: patch a Dockerfile.
+"""Patch a Dockerfile with a Jinja2 template.
 
 dockerfile-patch will help you insert templatable instructions in a Dockerfile
-after 'FROM', to build a patched version of a Dockerfile.
+(after the 'FROM image:release' line), to automatically build a patched
+version of a Dockerfile.
 
 """
 
@@ -40,45 +39,37 @@ def parse_args():
                         help="The path where the 'Dockerfile' is located.")
     parser.add_argument('-o', '--output', default=None,
                         help='Save the patched Dockerfile to a file')
+    parser.add_argument('-c', '--color', action="store_true",
+                        default=False, help='Colorize the output')
     parser.add_argument('-d', '--debug', action="store_true",
                         default=False, help='Show debug information')
-    return parser.parse_args()
+
+    args = parser.parse_args()
+    if args.debug:
+        debug_level = logging.INFO
+        logging.basicConfig(level=debug_level,
+                            format='%(asctime)s %(message)s')
+
+    return args
+
+
+def garbage_collector(signum, frame):
+    """Garbage collection."""
+    gc.collect()
+    logging.debug("%s: Garbage collection done.", sys.argv[0])
+    if signum == signal.SIGINT:
+        sys.stderr.write("Interrupted.\n".format())
+        sys.exit(1)
+    else:
+        sys.exit(0)
 
 
 def main():
     """The program starts here."""
     args = parse_args()
 
-    if args.debug:
-        debug_level = logging.INFO
-    else:
-        debug_level = logging.ERROR
-
-    logging.basicConfig(level=debug_level,
-                        format='%(asctime)s %(message)s')
-
-    # garbage collector
-    def garbage_collector(signum, frame):
-        """Garbage collection."""
-        gc.collect()
-        logging.debug("%s: Garbage collection done.", sys.argv[0])
-        if signum == signal.SIGINT:
-            sys.stderr.write("Interrupted.\n".format())
-            sys.exit(1)
-        else:
-            sys.exit(0)
-
     signal.signal(signal.SIGINT, garbage_collector)
     signal.signal(signal.SIGTERM, garbage_collector)
-
-    try:
-        from pygments import highlight
-        from pygments.lexers import DockerLexer
-        from pygments.formatters import TerminalFormatter
-
-        color_enabled = True if sys.stdout.isatty() else False
-    except ModuleNotFoundError:
-        color_enabled = False
 
     # default facts gatherer
     default_facts = os.path.join(os.path.dirname(dockerfile_patch.__file__),
@@ -104,10 +95,7 @@ def main():
         logging.info('[MAIN] The patched version of the Dockerfile:')
         logging.info('=============================================')
 
-        if color_enabled:
-            print(highlight(output, DockerLexer(), TerminalFormatter()))
-        else:
-            print(output)
+        print(output)
 
     sys.exit(0)
 

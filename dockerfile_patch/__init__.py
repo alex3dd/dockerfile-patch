@@ -41,10 +41,11 @@ class DockerfilePatcher(object):
 
     def load(self, path):
         """Load a Dockerfile."""
-        logging.info('[DOCKERFILE PATCHER] Loading: %s',
-                     os.path.join(path, 'Dockerfile'))
         dfp = DockerfileParser(path=path)
         self.structure = deepcopy(dfp.structure)
+        logging.info("[DOCKERFILE PATCHER] '%s' loaded:\n%s",
+                     os.path.join(path, 'Dockerfile'),
+                     dfp.content)
 
     def save(self, path, patch=True):
         """Save a patched version of the Dockerfile."""
@@ -66,8 +67,8 @@ class DockerfilePatcher(object):
             result.append(item)
             image_names.add(item['value'])
 
-        logging.info("[DOCKERFILE PATCHER] Base images in the Dockerfile: %s",
-                     str(list(image_names)))
+        logging.info("[DOCKERFILE PATCHER] Base images detected in "
+                     "the Dockerfile: %s", str(list(image_names)))
         return result
 
     def set_patch(self, image, content, patch_name=None):
@@ -274,8 +275,8 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
     try:
         with open(j2_template_path, 'r') as fhandler:
             jinja_patch = fhandler.read()
-            logging.info('[FACTS] Jinja patch loaded:\n%s\n',
-                         jinja_patch)
+            logging.info("[FACTS] Jinja patch '%s' loaded:\n%s\n",
+                         j2_template_path, jinja_patch)
     except OSError as err:
         sys.stderr.write("ERROR: unable to load the Jinja2 template "
                          "located in '{}'. {}\n".format(j2_template_path,
@@ -290,7 +291,7 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
             # Already gathered
             continue
 
-        logging.info('[MAIN] Gathering facts from the image: %s', image_name)
+        logging.info("[MAIN] Gathering facts from the image '%s'", image_name)
         facts[image_name] = docker_facter.gather_facts(image_name)
 
         # Creating the patch for this image
