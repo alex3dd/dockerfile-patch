@@ -20,8 +20,8 @@ dockerfile-patch can gather system facts from Docker images (supported Docker
 image facts: osfamily, operatingsystem, kernelrelease and architecture).
 
 The system facts gathered can be used to patch your Dockerfile with a Jinja2
-template that can use the Docker image system facts to render a customized
-patch between 'FROM image:release' and the reste of your Dockerfile.
+template. The Jinja2 template can use the facts to render a customized patch
+between 'FROM image:release' and the reste of your Dockerfile.
 
 ## Example
 
