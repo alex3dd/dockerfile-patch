@@ -1,1 +1,1 @@
-termicolor
+termcolor

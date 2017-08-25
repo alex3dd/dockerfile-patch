@@ -115,6 +115,7 @@ class DockerfilePatcher(object):
                     if patch['name']:
                         patch_comment += patch['name']
 
+                    patch_comment += ' '
                     patch_comment += ('-' * 8)
 
                     result += '\n'
@@ -224,6 +225,7 @@ class DockerFact(object):
             self.docker_client.containers.run(image=image,
                                               command=['/bin/sh',
                                                        guest_main_script],
+                                              user='root',
                                               remove=True,
                                               stdout=True,
                                               volumes=volumes)
@@ -258,7 +260,7 @@ class DockerFact(object):
         if image_user:
             facts['docker_image_user'] = image_user
         else:
-            facts['docker_image_user'] = ''
+            facts['docker_image_user'] = 'root'
 
         if not facts:
             self.logging.debug("[FACTS] ERROR: unable to gather facts.")
@@ -313,13 +315,15 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
 
         # Creating the patch for this image
         patch = jinja_patch
-        # ==== EMBED ========================================================
-        from IPython.terminal.embed import InteractiveShellEmbed
-        ipshell = InteractiveShellEmbed(config=None, banner1='', exit_msg='')
-        ipshell.confirm_exit = False
-        ipshell.mainloop()
-        exit()
-        # ==== EMBED ========================================================
+        if facts[image_name]['docker_image_user'] != 'root':
+            # change the user to root before the patch and go back to the
+            # Docker image's user after the patch
+            patch = '# dockerfile-patch: change the user to root\n' + \
+                'USER root\n\n' + \
+                "# The patch running as root:\n" + \
+                patch + \
+                '# dockerfile-patch: go back to the original user\n' + \
+                'USER ' + facts[image_name]['docker_image_user'] + '\n'
 
         template = Template(patch)
         dockerfile.set_patch(image_name, template.render(**facts[image_name]),

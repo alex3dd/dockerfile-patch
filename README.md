@@ -92,6 +92,14 @@ to add custom parameters:
 - Configure a proxy for apt-get / yum to download the packages faster during the build
 - Insert files that are specific to your infrastructure
 
+### Features of dockerfile-path
+The features of the current version:
+- Load system facts from a Docker image (osfamily)
+- Customizable patches with Jinja2 templates. The templates are customizable thanks to the Docker Image system facts
+- Auto detect the default default Dockerfile 'USER' and switch to root temporarily before the patch (after the patch, dockerfile-patch will re-switch to the original Dockerfile 'USER')
+- Show detailed debug information with --debug
+- Output the patch to a file with -o / --output
+
 ## Dependencies
 - Read 'requirements.txt' for required dependencies.
 - Read 'requirements_optional.txt' for optional dependencies.
