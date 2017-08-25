@@ -45,9 +45,9 @@ def parse_args():
                         default=False, help='Show debug information')
 
     args = parser.parse_args()
+    debug_format = '%(asctime)s %(name)s: %(message)s'
     if args.debug:
         debug_level = logging.DEBUG
-        debug_format = '%(asctime)s %(name)s: %(message)s'
 
         try:
             from termcolor import colored
