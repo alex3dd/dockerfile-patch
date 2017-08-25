@@ -1,6 +1,6 @@
 # dockerfile-patch
 
-Patch a Dockerfile with a Jinja2 template and build it!
+Patch a Dockerfile with a customizable Jinja2 template.
 
 - Author: Achraf Cherti (aka Asher256)
 - Email: asher256@gmail.com
