@@ -79,7 +79,7 @@ and insert it after 'FROM' in the patched Dockerfile.
 
 These are the steps followed by 'dockerfile-patch' to dynamically patch your
 Dockerfiles:
-- It will load the original (non patched) Dockerfile
+- It will load the original (not patched) Dockerfile
 - It will detect the Docker image used by the Dockerfile (from the Dockerfile instruction 'FROM')
 - It will run the detected docker image and gather system facts (with the script: 'default-facts.sh')
 - It will create a patched version of the Dockerfile (a patched Dockerfile means: Jinja2 template is rendered and inserted between the FROM and the rest of the Dockerfile)
