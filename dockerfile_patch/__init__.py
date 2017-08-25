@@ -356,13 +356,14 @@ def parse_args():
     if args.debug:
         debug_level = logging.DEBUG
 
-        try:
-            from termcolor import colored
-            if sys.stdout.isatty():
-                debug_format = colored('%(asctime)s %(name)s: ', 'green') \
-                    + "%(message)s"
-        except ModuleNotFoundError:
-            pass
+        if args.color:
+            try:
+                from termcolor import colored
+                if sys.stdout.isatty():
+                    debug_format = colored('%(asctime)s %(name)s: ', 'green') \
+                        + "%(message)s"
+            except ModuleNotFoundError:
+                pass
     else:
         debug_level = logging.INFO
 
