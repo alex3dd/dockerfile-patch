@@ -52,7 +52,7 @@ CMD ["/usr/sbin/sshd", "-D"]
 
 And run dockerfile-patch
 ```
-$ dockerfile-patch
+$ dockerfile-patch -p dockerfile-patch.j2
 [RUN] docker pull ubuntu:latest
 [SUCCESS] Patched Dockerfile:
 FROM ubuntu:latest
@@ -71,7 +71,7 @@ CMD ["/usr/sbin/sshd", "-D"]
 
 You can hide stderr to show the patched Dockerfile only:
 ```
-$ dockerfile-patch 2>/dev/null
+$ dockerfile-patch -p dockerfile-patch.j2 2>/dev/null
 FROM ubuntu:latest
 
 ######## dockerfile-patch patch for ubuntu:latest ########
@@ -91,12 +91,12 @@ As you can see, the command dockerfile-patch below rendered the Jinja patch
 
 You can add --debug to show detailed information about the patching process:
 ```
-$ dockerfile-patch --debug
+$ dockerfile-patch -p dockerfile-patch.j2 --debug
 ```
 
 To save the patched Dockerfile, use '-o' option:
 ```
-$ dockerfile-patch -o Dockerfile.patched
+$ dockerfile-patch -p dockerfile-patch.j2 -o Dockerfile.patched
 ```
 
 Once exported, you can build your Docker container using the patched Dockerfile:

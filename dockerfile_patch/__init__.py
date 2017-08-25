@@ -459,7 +459,9 @@ def main():
             fhandler.write(output)
 
         sys.stderr.write('\n[TIP] You can build it with: docker build -f '
-                         + args.output + ' -t image:release ' +
+                         + args.output + ' -t ' +
+                         os.path.basename(os.path.abspath(dockerfile_dir)) +
+                         ':latest ' +
                          dockerfile_dir + '\n')
     else:
         sys.stderr.write('[SUCCESS] Patched Dockerfile:\n')
