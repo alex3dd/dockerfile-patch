@@ -1,4 +1,4 @@
-dockerfile-parse>=0.0.7
-PyYAML
-Jinja2
 docker
+dockerfile-parse>=0.0.7
+Jinja2
+PyYAML
