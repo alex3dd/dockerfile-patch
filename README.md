@@ -91,7 +91,7 @@ Dockerfiles:
 
 dockerfile-patch will help you to patch existing Dockerfiles in order to add
 custom parameters specific to your needs:
-- Inject your self-signed certificate into an existing Dockerfile. Why? Because
+- **Inject your self-signed certificate into an existing Dockerfile**. Why? Because
   you don't want to add a self-signed configuration to all Dockerfiles you
   create. Your Dockerfiles will remain clean and the patching process will be
   done automatically thanks to dockerfile-patch and your continuous integration
