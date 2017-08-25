@@ -18,6 +18,8 @@ import logging
 import platform
 import tempfile
 import shutil
+import argparse
+import signal
 from collections import OrderedDict
 from copy import deepcopy
 import yaml
@@ -333,9 +335,88 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
     return dockerfile.to_str()
 
 
+def parse_args():
+    """Parse the arguments."""
+    description = "Patch a Dockerfile with a Jinja2 template"
+    usage = "%(prog)s [--option] [dockerfile_path]"
+    parser = argparse.ArgumentParser(description=description,
+                                     usage=usage)
+    parser.add_argument('path', type=str, nargs='?', default=None,
+                        help="The path where the 'Dockerfile' is located.")
+    parser.add_argument('-o', '--output', default=None,
+                        help='Save the patched Dockerfile to a file')
+    parser.add_argument('-c', '--color', action="store_true",
+                        default=False, help='Colorize the output')
+    parser.add_argument('-d', '--debug', action="store_true",
+                        default=False, help='Show debug information')
+
+    args = parser.parse_args()
+    debug_format = '%(asctime)s %(name)s: %(message)s'
+    if args.debug:
+        debug_level = logging.DEBUG
+
+        try:
+            from termcolor import colored
+            if sys.stdout.isatty():
+                debug_format = colored('%(asctime)s %(name)s: ', 'green') \
+                    + "%(message)s"
+        except ModuleNotFoundError:
+            pass
+    else:
+        debug_level = logging.INFO
+
+    logging.basicConfig(level=debug_level,
+                        format=debug_format)
+
+    return args
+
+
+def garbage_collector(signum, frame):
+    """Garbage collection."""
+    gc.collect()
+    if signum == signal.SIGINT:
+        sys.stderr.write("Interrupted.\n".format())
+        sys.exit(1)
+    else:
+        sys.exit(0)
+
+
 def main():
-    """The module test starts here."""
-    pass
+    """The program starts here."""
+
+    args = parse_args()
+
+    signal.signal(signal.SIGINT, garbage_collector)
+    signal.signal(signal.SIGTERM, garbage_collector)
+
+    # default facts gatherer
+    default_facts = os.path.join(os.path.dirname(__file__),
+                                 'data', 'default-facts.sh')
+
+    # Default parameters
+    if args.path:
+        dockerfile_dir = args.path
+    else:
+        dockerfile_dir = '.'
+
+    j2_template_path = os.path.join(dockerfile_dir, 'dockerfile-patch.j2')
+
+    # launch the pbuild script
+    output = dockerfile_patch(dockerfile_dir=dockerfile_dir,
+                      j2_template_path=j2_template_path,
+                      fact_scripts_paths=[default_facts])
+
+    if args.output:
+        with open(args.output, 'w') as fhandler:
+            fhandler.write(output)
+    else:
+        sys.stderr.write('[SUCCESS] Patched Dockerfile:\n')
+        sys.stderr.flush()
+
+        sys.stdout.write(output)
+        sys.stdout.flush()
+
+    sys.exit(0)
 
 
 if __name__ == '__main__':
