@@ -60,8 +60,8 @@ CMD ["/usr/sbin/sshd", "-D"]
 
 ```
 
-The command dockerfile-patch below will render the Jinja patch 'dockerfile-patch.j2'
-and insert it after 'FROM' in the patched Dockerfile.
+As you can see, the command dockerfile-patch below rendered the Jinja patch
+'dockerfile-patch.j2' and inserted it after 'FROM' in the patched Dockerfile.
 
 You can add --debug to show detailed information about the patching process:
 ```
