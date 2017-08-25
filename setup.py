@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Author: Achraf Cherti (Asher256) <asher256@gmail.com>
+# Author: Asher256 <asher256@gmail.com>
 # Github: https://github.com/Asher256/python-dockerfile_patch
 # License: LGPL 2.1
 #
