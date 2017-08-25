@@ -40,7 +40,7 @@ class DockerfilePatcher(object):
         """Init the class."""
         # empty DockerfileParser
         self.structure = []
-        self.patches = {}
+        self.patches = []
         self.logging = logging.getLogger(__name__ + '.' +
                                          self.__class__.__name__)
 
@@ -76,7 +76,7 @@ class DockerfilePatcher(object):
                            "the Dockerfile: %s", str(list(image_names)))
         return result
 
-    def set_patch(self, image, content, patch_name=None):
+    def add_patch(self, image, content, patch_name=None):
         """Patch an image with a Dockerfile content.
 
         The most important args are image (the Docker image like
@@ -84,14 +84,20 @@ class DockerfilePatcher(object):
         string that will be added to the comment before and after
         the patch.
 
+        patch_name needs to be unique (it is going to be a key in a dict).
+        Same thing with 'image' parameter.
+
         """
         if image in self.patches:
             raise KeyError("The image '{}' exists already.".format(image))
 
         self.logging.debug("[DOCKERFILE PATCHER] Patch for '%s' created:\n%s",
                            image, content)
-        self.patches[image.strip()] = {'content': content,
-                                       'name': patch_name}
+
+        image = image.strip()
+        self.patches.append({'image': image,
+                             'patch_name': patch_name,
+                             'content': content})
 
     def to_str(self, patch=True):
         """Return a patched version of the Dockerfile."""
@@ -109,21 +115,21 @@ class DockerfilePatcher(object):
                 continue
 
             if item['instruction'] == 'FROM':
-                baseimage = item['value']
-                if baseimage in self.patches:
-                    patch = self.patches[baseimage]
+                # baseimage = item['value']
+                for patch_item in self.patches:
+                    patch_comment = "#" + ('-' * 8) + " '" + \
+                        item['value'] + \
+                        "' dockerfile-patch"
 
-                    patch_comment = "#" + ('-' * 8) + " '" + item['value'] + \
-                        "' dockerfile-patch:" + ' '
-                    if patch['name']:
-                        patch_comment += patch['name']
+                    if patch_item['patch_name']:
+                        patch_comment += ': ' + patch_item['patch_name']
 
                     patch_comment += ' '
                     patch_comment += ('-' * 8)
 
                     result += '\n'
                     result += patch_comment
-                    result += '\n' + patch['content'] + '\n'
+                    result += '\n' + patch_item['content'] + '\n'
                     result += patch_comment
                     result += '\n' * 2
 
@@ -274,8 +280,15 @@ class DockerFact(object):
         return facts
 
 
-def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
-    """The command line interface."""
+def dockerfile_patch(dockerfile_dir, jinja2_patches_paths, fact_scripts_paths):
+    """The command line interface.
+
+    Params:
+        dockerfile_dir: directory where the Dockerfile is stored
+        jinja2_patches_paths: list of paths to Jinja2 templates
+        fact_scripts_paths: list of paths to fact scripts
+
+    """
     logger = logging.getLogger(__name__)
 
     dockerfile = DockerfilePatcher()
@@ -294,21 +307,27 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
     for item in fact_scripts_paths:
         docker_facter.add_fact_script(path=item)
 
-    try:
-        with open(j2_template_path, 'r') as fhandler:
-            jinja_patch = fhandler.read()
-            logger.debug("[FACTS] Jinja patch '%s' loaded:\n%s\n",
-                         j2_template_path, jinja_patch)
-    except OSError as err:
-        sys.stderr.write("ERROR: unable to load the Jinja2 template "
-                         "located in '{}'. {}\n".format(j2_template_path,
-                                                        str(err)))
-        sys.exit(1)
+    # Load multiple patches
+    jinja_patches_content = []
+    for item in jinja2_patches_paths:
+        try:
+            with open(item, 'r') as fhandler:
+                current_content = fhandler.read()
+                jinja_patches_content.append({'path': item,
+                                              'content': current_content})
+
+                logger.debug("[FACTS] Jinja patch '%s' loaded:\n%s\n",
+                             item, current_content)
+        except OSError as err:
+            sys.stderr.write("ERROR: unable to load the Jinja2 template "
+                             "located in '{}'. {}\n".format(item,
+                                                            str(err)))
+            sys.exit(1)
 
     # Gathering facts from all Docker images
     facts = {}
-    for item in dockerfile.get_images():
-        image_name = item['value']
+    for item_image in dockerfile.get_images():
+        image_name = item_image['value']
         if image_name in facts:
             # Already gathered
             continue
@@ -317,20 +336,27 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
         facts[image_name] = docker_facter.gather_facts(image_name)
 
         # Creating the patch for this image
-        patch = jinja_patch
+        patch = ''
+        for item_j2_data in jinja_patches_content:
+            template = Template(item_j2_data['content'])
+            patch += '\n'
+            patch += '#\n'
+            patch += '# ==> Patch: ' + item_j2_data['path'] + '\n'
+            patch += '#\n'
+            patch += template.render(**facts[image_name]).strip() + '\n'
+
+        # to the user switch (USER root, ..., USER previous_user)
         if facts[image_name]['docker_image_user'] != 'root':
             # change the user to root before the patch and go back to the
             # Docker image's user after the patch
-            patch = '# dockerfile-patch: change the user to root\n' + \
+            patch += '# dockerfile-patch: change the user to root\n' + \
                 'USER root\n\n' + \
                 "# The patch running as root:\n" + \
                 patch + \
                 '# dockerfile-patch: go back to the original user\n' + \
                 'USER ' + facts[image_name]['docker_image_user'] + '\n'
 
-        template = Template(patch)
-        dockerfile.set_patch(image_name, template.render(**facts[image_name]),
-                             patch_name=j2_template_path)
+        dockerfile.add_patch(image_name, patch)
 
     # Final result
     return dockerfile.to_str()
@@ -338,18 +364,25 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
 
 def parse_args():
     """Parse the arguments."""
+    # default template
     description = "Patch a Dockerfile with a Jinja2 template"
     usage = "%(prog)s [--option] [dockerfile_path]"
     parser = argparse.ArgumentParser(description=description,
                                      usage=usage)
     parser.add_argument('path', type=str, nargs='?', default=None,
                         help="The path where the 'Dockerfile' is located.")
+    parser.add_argument('-p', '--patch', action='append', required=True,
+                        help='Path to the Jinja2 patch (can be '
+                        'specified multiple times)')
     parser.add_argument('-o', '--output', default=None,
-                        help='Save the patched Dockerfile to a file')
+                        help='A file where the patched '
+                        'Dockerfile will be saved')
     parser.add_argument('-c', '--color', action="store_true",
-                        default=False, help='Colorize the output')
+                        default=False, help='Colorize the output '
+                        'when --debug is activated')
     parser.add_argument('-d', '--debug', action="store_true",
-                        default=False, help='Show debug information')
+                        default=False, help='Show more information '
+                        'during the patching process')
 
     args = parser.parse_args()
     debug_format = '%(asctime)s %(name)s: %(message)s'
@@ -401,11 +434,9 @@ def main():
     else:
         dockerfile_dir = '.'
 
-    j2_template_path = os.path.join(dockerfile_dir, 'dockerfile-patch.j2')
-
     # launch the pbuild script
     output = dockerfile_patch(dockerfile_dir=dockerfile_dir,
-                              j2_template_path=j2_template_path,
+                              jinja2_patches_paths=args.patch,
                               fact_scripts_paths=[default_facts])
 
     if args.output:
@@ -424,4 +455,6 @@ def main():
 if __name__ == '__main__':
     main()
 
+# quicktest: python3 % -p ../test/dockerfile-patch.j2
+# quicktest: -p ../test/dockerfile-patch.j2 -p ../test/dockerfile-patch.j2 ../test
 # vim:ai:et:sw=4:ts=4:sts=4:tw=78:fenc=utf-8

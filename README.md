@@ -53,6 +53,25 @@ CMD ["/usr/sbin/sshd", "-D"]
 And run dockerfile-patch
 ```
 $ dockerfile-patch
+[RUN] docker pull ubuntu:latest
+[SUCCESS] Patched Dockerfile:
+FROM ubuntu:latest
+
+######## dockerfile-patch patch for ubuntu:latest ########
+
+RUN touch /i-patched-this-container
+
+######## dockerfile-patch patch for ubuntu:latest ########
+RUN useradd -m -d /home/test -s /bin/sh test && \
+    echo "test:test" | chpasswd
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D"]
+
+```
+
+You can hide stderr to show the patched Dockerfile only:
+```
+$ dockerfile-patch 2>/dev/null
 FROM ubuntu:latest
 
 ######## dockerfile-patch patch for ubuntu:latest ########
