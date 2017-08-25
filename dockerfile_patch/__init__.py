@@ -9,16 +9,7 @@
 # This source code follows the PEP-8 style guide:
 # https://www.python.org/dev/peps/pep-0008/
 #
-"""dockerfile-patch: patch a Dockerfile and build it!
-
-dockerfile-patch will help you insert templatable instructions in a Dockerfile
-after 'FROM', to build a patched version of a Dockerfile.
-
-Features:
-    - Load a Dockerfile and patch it
-    - Load facters from a pulled Docker image
-
-"""
+"""Patch Dockerfiles with Jinja2 templates and Docker images system facts."""
 
 
 import sys
@@ -26,13 +17,9 @@ import os
 import logging
 import platform
 import tempfile
-import signal
-import gc
 import shutil
-import argparse
 from collections import OrderedDict
 from copy import deepcopy
-from subprocess import Popen, CalledProcessError
 import yaml
 import docker
 from dockerfile_parse import DockerfileParser
@@ -41,41 +28,6 @@ from jinja2 import Template
 
 assert platform.system() == 'Linux', 'The operating system needs to be Linux'
 assert sys.version_info >= (3, 3), "The Python version needs to be >= 3.3"
-
-
-class OldDocker(object):
-    """Wrapper around 'docker' command."""
-
-    def __init__(self, timeout=None):
-        """Init the Docker class."""
-        self.timeout = timeout
-
-    def __call__(self, args, *popen_args, **popen_kwargs):
-        """Same as subprocess.Popen() (except the first one: args)."""
-        assert isinstance(args, list), \
-            "The type of 'args' needs to be 'list'"
-        cmd = ['docker'] + args
-        logging.info('[RUN COMMAND] %s', ' '.join(cmd))
-        proc = Popen(args=cmd, *popen_args, **popen_kwargs)
-        (stdout, stderr) = proc.communicate(timeout=self.timeout)
-        if proc.returncode != 0:
-            raise CalledProcessError(returncode=proc.returncode,
-                                     cmd=cmd,
-                                     output=stdout,
-                                     stderr=stderr)
-
-        if stdout:
-            stdout = stdout.decode('utf-8', 'ignore')
-        else:
-            stdout = ''
-
-        if stderr:
-            stderr = stderr.decode('utf-8', 'ignore')
-        else:
-            # None because stdout is not PIPE
-            stderr = ''
-
-        return stdout, stderr
 
 
 class DockerfilePatcher(object):
@@ -350,91 +302,12 @@ def dockerfile_patch(dockerfile_dir, j2_template_path, fact_scripts_paths):
     return dockerfile.to_str()
 
 
-def parse_args():
-    """Parse the arguments."""
-    description = "Patch a Dockerfile with a Jinja2 template"
-    usage = "%(prog)s [--option] [dockerfile_path]"
-    parser = argparse.ArgumentParser(description=description,
-                                     usage=usage)
-    parser.add_argument('path', type=str,
-                        help="The path where the 'Dockerfile' is located.")
-    parser.add_argument('-o', '--output', default=None,
-                        help='Save the patched Dockerfile to a file')
-    parser.add_argument('-d', '--debug', action="store_true",
-                        default=False, help='Show debug information')
-    return parser.parse_args()
-
-
 def main():
-    """The program starts here."""
-    args = parse_args()
-
-    if args.debug:
-        debug_level = logging.INFO
-    else:
-        debug_level = logging.ERROR
-
-    logging.basicConfig(level=debug_level,
-                        format='%(asctime)s %(message)s')
-
-    # garbage collector
-    def garbage_collector(signum, frame):
-        """Garbage collection."""
-        gc.collect()
-        logging.debug("%s: Garbage collection done.", sys.argv[0])
-        if signum == signal.SIGINT:
-            sys.stderr.write("Interrupted.\n".format())
-            sys.exit(1)
-        else:
-            sys.exit(0)
-
-    signal.signal(signal.SIGINT, garbage_collector)
-    signal.signal(signal.SIGTERM, garbage_collector)
-
-    try:
-        from pygments import highlight
-        from pygments.lexers import DockerLexer
-        from pygments.formatters import TerminalFormatter
-
-        color_enabled = True if sys.stdout.isatty() else False
-    except ModuleNotFoundError:
-        color_enabled = False
-
-    # default facts gatherer
-    script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-    default_facts = os.path.join(script_dir, 'default-facts.sh')
-
-    # Default parameters
-    if args.path:
-        dockerfile_dir = args.path
-    else:
-        dockerfile_dir = '.'
-
-    j2_template_path = os.path.join(dockerfile_dir, 'dockerfile-patch.j2')
-
-    # launch the pbuild script
-    output = dockerfile_patch(dockerfile_dir=dockerfile_dir,
-                              j2_template_path=j2_template_path,
-                              fact_scripts_paths=[default_facts])
-
-    if args.output:
-        with open(args.output, 'w') as fhandler:
-            fhandler.write(output)
-    else:
-        logging.info('[MAIN] The patched version of the Dockerfile:')
-        logging.info('=============================================')
-
-        if color_enabled:
-            print(highlight(output, DockerLexer(), TerminalFormatter()))
-        else:
-            print(output)
-
-    sys.exit(0)
+    """The module test starts here."""
+    pass
 
 
 if __name__ == '__main__':
     main()
 
-
-# quicktest: python3 % test
 # vim:ai:et:sw=4:ts=4:sts=4:tw=78:fenc=utf-8

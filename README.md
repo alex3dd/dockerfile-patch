@@ -2,7 +2,7 @@
 
 Patch a Dockerfile with a Jinja2 template and build it!
 
-- Author: Asher256
+- Author: Achraf Cherti (aka Asher256)
 - Email: asher256@gmail.com
 - Github repo: https://github.com/Asher256/dockerfile-patch
 
