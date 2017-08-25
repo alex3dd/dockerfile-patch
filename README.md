@@ -43,7 +43,7 @@ EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
 ```
 
-And we run dockerfile-patch:
+And run dockerfile-patch
 ```
 $ dockerfile-patch
 FROM ubuntu:latest
